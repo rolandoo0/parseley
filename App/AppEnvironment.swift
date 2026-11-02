@@ -64,6 +64,7 @@ final class AppEnvironment {
         let series = SeriesController(
             tracker: SeriesTracker(store: seriesStore, rules: settings.seriesRules),
             monitor: monitor,
+            store: store,
             appInfo: appInfo
         )
         series.modes = modes
@@ -104,6 +105,11 @@ final class AppEnvironment {
 
         settings.onChange = { [weak self] in self?.applySettings() }
         series.onActiveChanged = { [weak self] active in self?.seriesBar.setVisible(active) }
+        series.onHistoryChanged = { [weak self] in
+            guard let self else { return }
+            refreshCounts()
+            if panelController.isVisible { panelModel.reload() }
+        }
         seriesBar.setVisible(series.isActive)   // a series may have been running at quit
 
         KeyboardShortcuts.onKeyUp(for: .togglePanel) { [weak self] in

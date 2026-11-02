@@ -34,7 +34,8 @@ final class HistoryPanelModel {
             }
         }
     }
-    private(set) var clips: [Clip] = []
+    /// Lightweight rows (no full text): what the list shows.
+    private(set) var clips: [ClipSummary] = []
     private(set) var selection = ListSelection()
     /// ⌘-click / ⇧-click selection of several clips (combined stats, joint transforms).
     private(set) var multi = MultiSelection()
@@ -63,17 +64,24 @@ final class HistoryPanelModel {
 
     // MARK: - Selection
 
-    var selectedClip: Clip? {
+    var selectedSummary: ClipSummary? {
         guard let id = selection.selectedID else { return nil }
         return clips.first { $0.id == id }
     }
 
-    /// The clips actions apply to: all multi-selected clips (in list order), or just the
-    /// focused one.
+    /// The focused clip with its full text, loaded on demand (and cached briefly).
+    var selectedClip: Clip? {
+        selection.selectedID.flatMap(fullClip)
+    }
+
+    /// The clips actions apply to, with full text: all multi-selected clips (in list
+    /// order), or just the focused one.
     var selectedClips: [Clip] {
-        if multi.isActive { return clips.filter { multi.contains($0.id) } }
+        if multi.isActive { return clips.filter { multi.contains($0.id) }.compactMap { fullClip($0.id) } }
         return selectedClip.map { [$0] } ?? []
     }
+
+    var multiSelectedCount: Int { multi.isActive ? multi.ids.count : 0 }
 
     // MARK: - Stats
 
@@ -90,15 +98,14 @@ final class HistoryPanelModel {
         selectionStats?.items(format: format, primary: mode.primaryStat) ?? []
     }
 
-    /// "Σ 1,492.5 · 3 values" for a list row, or nil.
-    func rowSummary(for clip: Clip) -> String? {
-        guard mode.showsNumbers, let stats = stats(for: clip),
-              let sum = stats.items(format: format).first(where: { $0.label == "Sum" })
-        else { return nil }
-        return "Σ \(sum.display)  ·  \(stats.count) values"
+    /// "Σ 1,492.5 · 3 values" for a list row, or nil. Uses the sum stored at capture
+    /// time, so rows never re-read or re-parse clip text.
+    func rowSummary(for row: ClipSummary) -> String? {
+        guard mode.showsNumbers, row.kind != .seriesTotal, row.numberCount >= 2, let sum = row.numberSum else { return nil }
+        return "Σ \(NumberFormatting.grouped(sum, maxFractionDigits: 6, format: format))  ·  \(row.numberCount) values"
     }
 
-    /// Stats for one clip with 2+ numbers. Cached per clip and format.
+    /// Stats for one clip with 2+ numbers. Cached for the most recent clips only.
     func stats(for clip: Clip) -> NumberStats? {
         guard let id = clip.id else { return nil }
         let key = "\(id)|\(format.rawValue)"
@@ -107,6 +114,7 @@ final class HistoryPanelModel {
         let stats = clip.content.utf16.count <= Self.maxStatsLength
             ? NumberStats(text: clip.content, parser: NumberParser(format: format)) : nil
         let result = (stats?.count ?? 0) >= 2 ? stats : nil
+        if statsCache.count > 16 { statsCache.removeAll() }   // small and bounded
         statsCache[key] = result   // clip content never changes, so caching is safe
         return result
     }
@@ -151,6 +159,8 @@ final class HistoryPanelModel {
     @ObservationIgnored private var statsCache: [String: NumberStats?] = [:]
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var commandTargets: [Clip] = []
+    /// Full clips recently needed (selected, multi-selected). Bounded; cleared on hide.
+    @ObservationIgnored private var fullClips: [Int64: Clip] = [:]
 
     static let maxStatsLength = 200_000
 
@@ -178,9 +188,19 @@ final class HistoryPanelModel {
         focusRequest += 1
     }
 
+    /// Frees everything the panel holds while hidden: rows, full clips, caches.
+    func releaseMemory() {
+        clips = []
+        fullClips = [:]
+        statsCache = [:]
+        commandTargets = []
+        multi.clear()
+    }
+
     func reload(resetSelection: Bool = false) {
+        fullClips = [:]   // pins/notes may have changed
         do {
-            clips = try store.fetch(matching: isCommandMode ? "" : query, limit: Self.fetchLimit)
+            clips = try store.summaries(matching: isCommandMode ? "" : query, limit: Self.fetchLimit)
             selection.update(ids: ids, resetToFirst: resetSelection)
             if resetSelection { multi.clear() } else { multi.prune(to: ids) }
         } catch {
@@ -202,15 +222,15 @@ final class HistoryPanelModel {
         selection.move(by: delta, in: ids)
     }
 
-    func select(_ clip: Clip) {
+    func select(_ row: ClipSummary) {
         multi.clear()
-        if let id = clip.id { selection.select(id, in: ids) }
+        selection.select(row.id, in: ids)
     }
 
     /// Mouse click on a row: plain click selects; ⌘-click toggles it in a multi-selection;
     /// ⇧-click selects the range from the focused row.
-    func click(_ clip: Clip) {
-        guard let id = clip.id else { return }
+    func click(_ row: ClipSummary) {
+        let id = row.id
         // SwiftUI tap gestures don't report modifier keys; NSEvent knows which are held now.
         let modifiers = NSEvent.modifierFlags
         if modifiers.contains(.command) {
@@ -219,7 +239,7 @@ final class HistoryPanelModel {
         } else if modifiers.contains(.shift) {
             multi.extend(to: id, from: selection.selectedID, in: ids)
         } else {
-            select(clip)
+            select(row)
         }
     }
 
@@ -227,12 +247,12 @@ final class HistoryPanelModel {
 
     /// Enter / double-click: put the clip on the clipboard, close, and paste into the app
     /// that was frontmost before the panel opened. In the command bar: run the command.
-    func activate(_ clip: Clip? = nil, mode activation: ActivationMode = .paste) {
-        if clip == nil, isCommandMode {
+    func activate(_ row: ClipSummary? = nil, mode activation: ActivationMode = .paste) {
+        if row == nil, isCommandMode {
             runCommand(at: commandIndex)
             return
         }
-        guard let clip = clip ?? selectedClip, let id = clip.id else { return }
+        guard let id = row?.id ?? selection.selectedID else { return }
         do {
             try monitor.copyToClipboard(clipID: id)
         } catch {
@@ -320,18 +340,17 @@ final class HistoryPanelModel {
         showToast("Added to \(series.active?.name ?? "series")")
     }
 
-    func togglePin(_ clip: Clip? = nil) {
-        guard let clip = clip ?? selectedClip, let id = clip.id else { return }
-        perform { try store.setPinned(id: id, !clip.isPinned) }
+    func togglePin(_ row: ClipSummary? = nil) {
+        guard let row = row ?? selectedSummary else { return }
+        perform { try store.setPinned(id: row.id, !row.isPinned) }
     }
 
-    func delete(_ clip: Clip) {
-        guard let id = clip.id else { return }
-        perform { try store.delete(id: id) }
+    func delete(_ row: ClipSummary) {
+        perform { try store.delete(id: row.id) }
     }
 
     func deleteSelected() {
-        if let clip = selectedClip { delete(clip) }
+        if let row = selectedSummary { delete(row) }
     }
 
     func enableAutoPaste() {
@@ -392,7 +411,9 @@ final class HistoryPanelModel {
         // Pin.
         if targets.count == 1, let clip = targets.first {
             list.append(PanelCommand(id: "clip.pin", title: clip.isPinned ? "Unpin" : "Pin", detail: "Clip", icon: "pin") {
-                [weak self] in self?.togglePin(clip)
+                [weak self] in
+                guard let self, let row = self.clips.first(where: { $0.id == clip.id }) else { return }
+                self.togglePin(row)
             })
         }
 
@@ -411,7 +432,16 @@ final class HistoryPanelModel {
 
     // MARK: - Helpers
 
-    private var ids: [Int64] { clips.compactMap(\.id) }
+    private var ids: [Int64] { clips.map(\.id) }
+
+    /// Full text for a clip, from a small cache or the database.
+    private func fullClip(_ id: Int64) -> Clip? {
+        if let cached = fullClips[id] { return cached }
+        guard let clip = try? store.clip(id: id) else { return nil }
+        if fullClips.count >= 32 { fullClips.removeAll() }
+        fullClips[id] = clip
+        return clip
+    }
 
     private func showToast(_ message: String) {
         toast = message

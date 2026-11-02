@@ -26,6 +26,9 @@ public final class SeriesTracker {
     public var rules: SeriesRules
     /// Called after every change (the UI refreshes from it).
     public var onChange: (() -> Void)?
+    /// Called with a series when it ends (stopped, replaced by a new one, or split off by
+    /// a prompt). The app saves its total into clipboard history.
+    public var onSeriesEnded: ((Series) -> Void)?
     /// Last persistence error, if any (the tracker keeps working in memory).
     public private(set) var lastError: String?
 
@@ -150,6 +153,7 @@ public final class SeriesTracker {
         old.entries.removeSubrange(index...)
         old.endedAt = now()
         persist(old)
+        onSeriesEnded?(old)
 
         let fresh = Series(name: defaultName(), createdAt: now(), entries: moved)
         active = fresh
@@ -179,6 +183,7 @@ public final class SeriesTracker {
         persist(series)
         active = nil
         prompt = nil
+        onSeriesEnded?(series)
     }
 
     private func dropOldSkipped(_ series: inout Series) {

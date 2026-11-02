@@ -60,6 +60,7 @@ final class PanelController {
         isShown = false
         removeKeyMonitor()
         panel.orderOut(nil)
+        model.releaseMemory()   // don't hold rows or clip text while hidden
     }
 
     // MARK: - Placement

@@ -146,7 +146,7 @@ struct HistoryView: View {
     }
 
     @ViewBuilder
-    private func contextMenu(for clip: Clip) -> some View {
+    private func contextMenu(for clip: ClipSummary) -> some View {
         Button("Paste") { model.activate(clip) }
         Button("Copy") { model.activate(clip, mode: .copyOnly) }
         Button(clip.isPinned ? "Unpin" : "Pin") { model.togglePin(clip) }
@@ -247,7 +247,7 @@ struct HistoryView: View {
                 .font(.system(size: 20))
                 .foregroundStyle(Theme.accentGradient)
             VStack(alignment: .leading, spacing: 3) {
-                Text(verbatim: "\(model.selectedClips.count) clips selected")
+                Text(verbatim: "\(model.multiSelectedCount) clips selected")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.textPrimary)
                 Text("Stats combine every number. Transforms run on all of them, one per line.")
@@ -319,7 +319,7 @@ struct HistoryView: View {
 
 /// One row in the history list.
 struct ClipRow: View {
-    let clip: Clip
+    let clip: ClipSummary
     let isSelected: Bool
     /// Part of a ⌘/⇧-click multi-selection.
     var isMultiSelected = false
@@ -343,7 +343,7 @@ struct ClipRow: View {
             .opacity(isSelected ? 1 : 0.85)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(verbatim: ClipPreview.title(clip.content, maxLength: 200))
+                Text(verbatim: clip.title)
                     .font(.system(size: 13.5, weight: .medium))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
@@ -407,8 +407,7 @@ struct ClipRow: View {
 
     private var metadata: String {
         var parts: [String] = []
-        let lines = ClipPreview.lineCount(clip.content)
-        if lines > 1 && summary == nil { parts.append("\(lines) lines") }
+        if clip.lineCount > 1 && summary == nil { parts.append("\(clip.lineCount) lines") }
         if let name = app?.name { parts.append(name) }
         parts.append(RelativeTime.string(for: clip.lastUsedAt))
         return parts.joined(separator: " · ")

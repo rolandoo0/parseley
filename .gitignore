@@ -15,3 +15,6 @@ Package.resolved.bak
 
 # macOS
 .DS_Store
+
+# Your own signing settings (Team ID); see Config/Signing.xcconfig
+Config/Local.xcconfig

@@ -1,27 +1,56 @@
 # Parseley
 
-A macOS menu-bar clipboard manager focused on numbers and data. Fully local: no
-network, no accounts, no analytics.
+A macOS menu-bar clipboard manager focused on numbers and data: every copy is kept,
+numbers come with their sum and stats, lists turn into SQL or JSON in one click, and a
+running total follows you across apps. Fully local: no network, no accounts, no
+analytics. Free and open source (MIT).
 
-**Status:** v2: history panel, number parsing/stats, transforms, series (running
-tally), modes, command bar, per-column table stats, recipes, paste queue, CLI + MCP
-server, onboarding. CI builds and tests every push on macOS.
+[![CI](https://github.com/rolandoo0/parseley/actions/workflows/ci.yml/badge.svg)](https://github.com/rolandoo0/parseley/actions/workflows/ci.yml)
 
-## Requirements
+## Install
 
-- macOS 14+
-- Xcode 16+ (needed for Swift 6 tools and Swift Testing)
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
-
-## Build & run
+Requires macOS 14 Sonoma or later (Apple silicon or Intel). Paste this into Terminal:
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/rolandoo0/parseley/main/scripts/install.sh | bash
+```
+
+It downloads the latest release, checks its checksum, installs **Parseley.app** in
+/Applications and the `parseley` command-line tool, and opens the app. You can
+[read the script](scripts/install.sh) first. Run the same command again to update.
+
+**Or install by hand:** download `Parseley-x.y.z.dmg` from
+[Releases](https://github.com/rolandoo0/parseley/releases/latest), open it and drag
+Parseley to Applications. The app isn't notarized by Apple yet, so the first time you
+open it macOS says it can't verify the developer: open **System Settings → Privacy &
+Security**, scroll down and click **Open Anyway** (once).
+
+**First run:** Parseley lives in the menu bar (no Dock icon) and opens a short welcome
+guide with a 90-second video. Press ⌘⇧V for your clipboard history. For auto-paste,
+allow Parseley under **System Settings → Privacy & Security → Accessibility**. After an
+update, if auto-paste stops working, switch it off and on again there.
+
+**Uninstall:** quit Parseley from the menu bar, then
+`rm -rf /Applications/Parseley.app "$(command -v parseley)"`. Your history is in
+`~/Library/Application Support/Parseley` (delete it too to remove everything).
+
+## Build from source
+
+- macOS 14+, Xcode 16+ (Swift 6 tools, Swift Testing)
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
+
+```sh
+git clone https://github.com/rolandoo0/parseley && cd parseley
 xcodegen                 # generates Parseley.xcodeproj from project.yml
 open Parseley.xcodeproj
 ```
 
 In Xcode, pick the **Parseley** scheme and press ⌘R. There's no window and no Dock
 icon. Look for the clipboard-with-a-sprout icon in the menu bar.
+
+Builds are ad-hoc signed, so no Apple account is needed. To keep the Accessibility
+permission across rebuilds, create `Config/Local.xcconfig` (git-ignored) with your
+Team ID; see [Config/Signing.xcconfig](Config/Signing.xcconfig).
 
 Run `xcodegen` again whenever you add or remove files under `App/` or edit `project.yml`.
 
@@ -206,10 +235,15 @@ excluded apps).
 ## Releases
 
 Push a tag (`git tag v0.2.0 && git push origin v0.2.0`) and the Release workflow builds
-`Parseley-0.2.0.dmg` and `parseley-cli-0.2.0.zip` into a draft GitHub Release. Without
-signing secrets the app is unsigned (first open: right-click → Open). To ship signed
-and notarized builds, add the secrets listed at the top of
-`.github/workflows/release.yml` (needs a paid Apple Developer account).
+a universal (Apple silicon + Intel) `Parseley-0.2.0.dmg`, `parseley-cli-0.2.0.zip` and
+`SHA256SUMS.txt`, test-installs them with `scripts/install.sh`, and publishes the
+GitHub Release that the install script downloads. Tags with a suffix (`v0.3.0-beta.1`)
+become pre-releases.
+
+Without signing secrets the app is ad-hoc signed: the install script works without any
+prompt, and a manually downloaded DMG needs **Open Anyway** once. To ship signed and
+notarized builds that open without any warning, add the secrets listed at the top of
+`.github/workflows/release.yml` (needs a paid Apple Developer account, $99/year).
 
 ## Performance notes
 
@@ -228,11 +262,12 @@ approved under **System Settings → Privacy & Security → Accessibility**. Wit
 Parseley still works: ↩ copies the clip and the panel shows a banner; you press ⌘V
 yourself.
 
-1. **Give the app a stable signature** (once). macOS ties the permission to the app's
-   code signature. With the default ad-hoc signing, every rebuild looks like a new app
-   and the permission silently stops working. In `project.yml` set
-   `DEVELOPMENT_TEAM` to your Team ID and `CODE_SIGN_IDENTITY` to `"Apple Development"`
-   (see the comments there), then run `xcodegen`. A free Apple ID works: add it under
+1. **Give the app a stable signature** (once, when building from source). macOS ties the
+   permission to the app's code signature. With the default ad-hoc signing, every
+   rebuild looks like a new app and the permission silently stops working. Create
+   `Config/Local.xcconfig` with `DEVELOPMENT_TEAM = <your Team ID>` and
+   `CODE_SIGN_IDENTITY = Apple Development` (see `Config/Signing.xcconfig`), then run
+   `xcodegen`. A free Apple ID works: add it under
    Xcode → Settings → Accounts; the Team ID is shown on developer.apple.com → Account →
    Membership, or in Xcode's Signing & Capabilities tab once you select the team.
 2. Run the app, open the panel and press ↩ (or click **Enable Auto-Paste…**). macOS
@@ -242,7 +277,7 @@ yourself.
 **If auto-paste stops working after a rebuild** (Parseley shows as enabled but the
 banner is back): the signature changed. In the Accessibility list select Parseley,
 remove it with **–**, then grant it again. Equivalent from Terminal:
-`tccutil reset Accessibility com.example.parseley` (use your bundle id).
+`tccutil reset Accessibility io.github.rolandoo0.parseley`.
 
 No other permissions are needed. Reading the clipboard and registering a global
 hotkey don't require any.
@@ -288,3 +323,12 @@ it with `sqlite3`: `sqlite3 ~/Library/Application\ Support/Parseley/parseley.sql
   honoured; see `PrivacyPolicy.swift`.
 - Apps listed in Settings → Privacy are never captured.
 - Whatever is on the clipboard when Parseley launches is not imported.
+
+## Contributing
+
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE). Uses [GRDB](https://github.com/groue/GRDB.swift) and
+[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), both MIT.

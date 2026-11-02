@@ -36,7 +36,12 @@ final class HistoryPanelModel {
     }
     /// Lightweight rows (no full text): what the list shows.
     private(set) var clips: [ClipSummary] = []
-    private(set) var selection = ListSelection()
+    private(set) var selection = ListSelection() {
+        // A different clip means a different table: back to "all columns".
+        didSet { if selection.selectedID != oldValue.selectedID { selectedColumn = nil } }
+    }
+    /// For a table clip: the column the stats are about (nil = every number).
+    private(set) var selectedColumn: Int?
     /// ⌘-click / ⇧-click selection of several clips (combined stats, joint transforms).
     private(set) var multi = MultiSelection()
     private(set) var isAccessibilityTrusted = AccessibilityPermission.isTrusted
@@ -90,6 +95,9 @@ final class HistoryPanelModel {
     var selectionStats: NumberStats? {
         guard mode.showsNumbers else { return nil }
         if multi.isActive { return combinedStats(of: selectedClips) }
+        if let column = selectedColumn, let table = selectedTable, table.columns.indices.contains(column) {
+            return table.columns[column].stats
+        }
         return selectedClip.flatMap { stats(for: $0) }
     }
 
@@ -127,6 +135,27 @@ final class HistoryPanelModel {
         return NumberStats(values: numbers.map(\.value), inputFractionDigits: numbers.map(\.fractionDigits).max() ?? 0)
     }
 
+    // MARK: - Tables
+
+    /// The focused clip as a spreadsheet range, if it is one with numeric columns.
+    var selectedTable: ParsedTable? {
+        guard mode.showsNumbers, !multi.isActive, let row = selectedSummary, row.lineCount >= 2,
+              let clip = selectedClip else { return nil }
+        let key = "\(row.id)|\(format.rawValue)"
+        if let cached = tableCache[key] { return cached }
+        let table = clip.content.contains("\t") && clip.content.utf16.count <= Self.maxStatsLength
+            ? TableParser.parse(clip.content, format: format) : nil
+        let result = (table?.numericColumns.isEmpty ?? true) ? nil : table
+        if tableCache.count > 8 { tableCache.removeAll() }
+        tableCache[key] = result
+        return result
+    }
+
+    /// Column chip: nil = all numbers in the clip.
+    func selectColumn(_ index: Int?) {
+        selectedColumn = index
+    }
+
     // MARK: - Command bar
 
     var isCommandMode: Bool { query.hasPrefix(">") }
@@ -157,6 +186,7 @@ final class HistoryPanelModel {
     @ObservationIgnored private let pasteService = PasteService()
     @ObservationIgnored private var hasPromptedForAccessibility = false
     @ObservationIgnored private var statsCache: [String: NumberStats?] = [:]
+    @ObservationIgnored private var tableCache: [String: ParsedTable?] = [:]
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var commandTargets: [Clip] = []
     /// Full clips recently needed (selected, multi-selected). Bounded; cleared on hide.
@@ -193,6 +223,7 @@ final class HistoryPanelModel {
         clips = []
         fullClips = [:]
         statsCache = [:]
+        tableCache = [:]
         commandTargets = []
         multi.clear()
     }
@@ -382,6 +413,18 @@ final class HistoryPanelModel {
                     id: "stat.\(item.label)", title: "Copy \(item.label.lowercased())", detail: item.display,
                     icon: "number"
                 ) { [weak self] in self?.copyStat(item) })
+            }
+        }
+
+        // Columns of a copied spreadsheet range.
+        if mode.showsNumbers, targets.count == 1, let target = targets.first,
+           target.content.contains("\t"), target.content.utf16.count <= Self.maxStatsLength,
+           let table = TableParser.parse(target.content, format: format) {
+            for column in table.numericColumns {
+                guard let sum = column.stats?.items(format: format).first(where: { $0.label == "Sum" }) else { continue }
+                list.append(PanelCommand(
+                    id: "column.\(column.index)", title: "Copy sum of \(column.name)", detail: sum.display, icon: "tablecells"
+                ) { [weak self] in self?.copyStat(sum) })
             }
         }
 

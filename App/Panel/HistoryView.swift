@@ -220,6 +220,10 @@ struct HistoryView: View {
                 preview(of: clip)
             }
 
+            if let table = model.selectedTable {
+                ColumnChips(table: table, selected: model.selectedColumn) { model.selectColumn($0) }
+            }
+
             if !model.statItems.isEmpty {
                 StatsStripView(items: model.statItems) { model.copyStat($0) }
                     // Fade/slide in when moving onto a clip that has numbers.
@@ -633,5 +637,48 @@ struct ModeChip: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(modes.isAutomatic ? "Mode follows the app you're in" : "Mode locked by hand")
+    }
+}
+
+// MARK: - Table columns
+
+/// "All · Q1 · Q2": choose which column of a spreadsheet range the stats are about.
+struct ColumnChips: View {
+    let table: ParsedTable
+    let selected: Int?
+    let onSelect: (Int?) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                Image(systemName: "tablecells")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+                chip("All", isOn: selected == nil) { onSelect(nil) }
+                ForEach(table.numericColumns) { column in
+                    chip(column.name, isOn: selected == column.index) { onSelect(column.index) }
+                }
+                Text(verbatim: "\(table.rowCount) rows")
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(Theme.textTertiary)
+                    .padding(.leading, 4)
+            }
+            .padding(.vertical, 1)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func chip(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(verbatim: title)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .foregroundStyle(isOn ? Theme.cyan : Theme.textSecondary)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(isOn ? Theme.cyan.opacity(0.16) : Theme.glassFill))
+                .overlay(Capsule().strokeBorder(isOn ? Theme.cyan.opacity(0.5) : Theme.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }

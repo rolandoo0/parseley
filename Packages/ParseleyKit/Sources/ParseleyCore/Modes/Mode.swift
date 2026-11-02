@@ -17,12 +17,16 @@ public struct Mode: Identifiable, Equatable, Codable, Sendable {
     public var primaryStat: String
     /// Transform ids shown first, in this order; the rest follow.
     public var pinnedTransforms: [String]
+    /// A recipe run automatically on every copy made in this mode's apps (the result
+    /// replaces the clipboard; the original stays in history). Nil = off.
+    public var autoRecipeID: String?
     public var isBuiltIn: Bool
 
     public init(
         id: String, name: String, icon: String, apps: [String] = [],
         numberFormat: NumberFormat = .us, showsNumbers: Bool = true, countsInSeries: Bool = true,
-        primaryStat: String = "Sum", pinnedTransforms: [String] = [], isBuiltIn: Bool = false
+        primaryStat: String = "Sum", pinnedTransforms: [String] = [], autoRecipeID: String? = nil,
+        isBuiltIn: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -33,6 +37,7 @@ public struct Mode: Identifiable, Equatable, Codable, Sendable {
         self.countsInSeries = countsInSeries
         self.primaryStat = primaryStat
         self.pinnedTransforms = pinnedTransforms
+        self.autoRecipeID = autoRecipeID
         self.isBuiltIn = isBuiltIn
     }
 }

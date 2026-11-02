@@ -8,6 +8,12 @@ extension KeyboardShortcuts.Name {
     ///
     /// Note: a global hotkey takes precedence over app shortcuts, so this replaces
     /// "Paste and Match Style" (also ⌘⇧V) in apps like Pages, Mail and Slack while
-    /// Parseley is running. Users can rebind it in Settings (M4).
+    /// Parseley is running. Users can rebind it in Settings.
     static let togglePanel = Self("togglePanel", default: .init(.v, modifiers: [.command, .shift]))
+
+    /// Starts a series, or stops the running one. Default ⌃⌥⌘T ("tally").
+    static let toggleSeries = Self("toggleSeries", default: .init(.t, modifiers: [.control, .option, .command]))
+
+    /// Ends the running series and starts a fresh one. Default ⌃⌥⌘N.
+    static let newSeries = Self("newSeries", default: .init(.n, modifiers: [.control, .option, .command]))
 }

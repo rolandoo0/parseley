@@ -116,6 +116,7 @@ struct HistoryView: View {
                         ClipRow(
                             clip: clip,
                             isSelected: clip.id == model.selection.selectedID,
+                            isMultiSelected: model.multi.contains(clip.id),
                             app: model.appInfo.info(for: clip.sourceBundleID),
                             stats: model.stats(for: clip)
                         )
@@ -123,7 +124,7 @@ struct HistoryView: View {
                         // Order matters: the double-tap gesture must come first or the
                         // single tap would always win.
                         .onTapGesture(count: 2) { model.activate(clip) }
-                        .onTapGesture { model.select(clip) }
+                        .onTapGesture { model.click(clip) }   // ⌘/⇧-click multi-select
                         .contextMenu { contextMenu(for: clip) }
                     }
                 }
@@ -163,26 +164,24 @@ struct HistoryView: View {
 
     private func detail(for clip: Clip) -> some View {
         VStack(spacing: 10) {
-            ScrollView {
-                Text(verbatim: String(clip.content.prefix(5_000)))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
+            if model.multi.isActive {
+                multiSummary
+            } else {
+                preview(of: clip)
             }
-            .scrollIndicators(.hidden)
-            .frame(height: 74)
-            .glassCard(radius: Theme.tileRadius)
 
-            if let stats = model.selectedStats {
+            if let stats = model.multi.isActive ? model.combinedStats : model.selectedStats {
                 StatsStripView(stats: stats) { model.copyStat($0) }
                     // Fade/slide in when moving onto a clip that has numbers.
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            TransformBarView { model.applyTransform($0) }
+            HStack(spacing: 6) {
+                TransformChip(title: "Add to series", icon: "sum") { model.addSelectionToSeries() }
+                    .help("Add the selected clip(s) to the running series (starts one if needed)")
+                Rectangle().fill(Theme.hairline).frame(width: 1, height: 16)
+                TransformBarView { model.applyTransform($0) }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.top, 12)
@@ -190,6 +189,41 @@ struct HistoryView: View {
         // A slightly darker "console" zone separates actions from the list.
         .background(Color.black.opacity(0.14))
         .overlay(alignment: .top) { glowDivider.opacity(0.5) }
+    }
+
+    private var multiSummary: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "square.stack.3d.up.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(Theme.accentGradient)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: "\(model.selectedClips.count) clips selected")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Stats combine every number. Transforms run on all of them, one per line.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 74)
+        .glassCard(radius: Theme.tileRadius, highlighted: true)
+    }
+
+    private func preview(of clip: Clip) -> some View {
+        ScrollView {
+            Text(verbatim: String(clip.content.prefix(5_000)))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+        }
+        .scrollIndicators(.hidden)
+        .frame(height: 74)
+        .glassCard(radius: Theme.tileRadius)
     }
 
     // MARK: - Footer
@@ -236,6 +270,8 @@ struct HistoryView: View {
 struct ClipRow: View {
     let clip: Clip
     let isSelected: Bool
+    /// Part of a ⌘/⇧-click multi-selection.
+    var isMultiSelected = false
     let app: AppInfo?
     /// Present when the clip has 2+ numbers: the row then shows its sum inline.
     let stats: NumberStats?
@@ -307,6 +343,11 @@ struct ClipRow: View {
                     .frame(width: 3, height: 20)
                     .shadow(color: Theme.cyan, radius: 6)
                     .padding(.leading, 3)
+            }
+        } else if isMultiSelected {
+            ZStack {
+                shape.fill(Theme.violet.opacity(0.14))
+                shape.strokeBorder(Theme.violet.opacity(0.45), lineWidth: 1)
             }
         } else if hovering {
             shape.fill(Theme.glassFill)

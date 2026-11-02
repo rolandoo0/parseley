@@ -143,3 +143,64 @@ import ParseleyCore
         #expect(f.maxY == 800)
     }
 }
+
+@Suite struct MultiSelectionTests {
+    let list: [Int64] = [10, 20, 30, 40, 50]
+
+    @Test func commandClickAddsFocusedRowToo() {
+        var m = MultiSelection()
+        m.toggle(30, focused: 10)
+        #expect(m.ids == [10, 30])
+        #expect(m.isActive)
+        m.toggle(50, focused: 30)
+        #expect(m.ordered(in: list) == [10, 30, 50])
+    }
+
+    @Test func commandClickTogglesOffAndCollapsesBelowTwo() {
+        var m = MultiSelection()
+        m.toggle(30, focused: 10)
+        m.toggle(30, focused: 30)
+        #expect(m.ids.isEmpty)
+        #expect(!m.isActive)
+    }
+
+    @Test func commandClickOnFocusedRowAloneSelectsNothing() {
+        var m = MultiSelection()
+        m.toggle(10, focused: 10)
+        #expect(m.ids.isEmpty)
+    }
+
+    @Test func shiftClickSelectsRangeInEitherDirection() {
+        var m = MultiSelection()
+        m.extend(to: 40, from: 20, in: list)
+        #expect(m.ordered(in: list) == [20, 30, 40])
+        m.extend(to: 10, from: 30, in: list)
+        #expect(m.ordered(in: list) == [10, 20, 30])
+    }
+
+    @Test func shiftClickOnSameRowOrUnknownClears() {
+        var m = MultiSelection()
+        m.extend(to: 20, from: 20, in: list)
+        #expect(m.ids.isEmpty)
+        m.extend(to: 99, from: 20, in: list)
+        #expect(m.ids.isEmpty)
+        m.extend(to: 20, from: nil, in: list)
+        #expect(m.ids.isEmpty)
+    }
+
+    @Test func pruneDropsMissingAndCollapses() {
+        var m = MultiSelection()
+        m.extend(to: 30, from: 10, in: list)
+        m.prune(to: [10, 30, 40])
+        #expect(m.ids == [10, 30])
+        m.prune(to: [10])
+        #expect(m.ids.isEmpty)
+    }
+
+    @Test func containsHandlesNil() {
+        var m = MultiSelection()
+        m.toggle(20, focused: 10)
+        #expect(m.contains(20))
+        #expect(!m.contains(nil))
+    }
+}

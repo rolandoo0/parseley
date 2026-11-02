@@ -96,8 +96,10 @@ struct VisualEffectBackground: NSViewRepresentable {
 /// The panel's crystal backdrop: blur, a faint cyan/violet tint, a soft light bloom in
 /// the top-left corner, and a gradient edge.
 struct CrystalBackground: View {
+    var cornerRadius: CGFloat = Theme.panelRadius
+
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
             VisualEffectBackground()
             LinearGradient(

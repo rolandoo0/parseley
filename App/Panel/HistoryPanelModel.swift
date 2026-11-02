@@ -17,6 +17,8 @@ final class HistoryPanelModel {
     }
     private(set) var clips: [Clip] = []
     private(set) var selection = ListSelection()
+    /// ⌘-click / ⇧-click selection of several clips (combined stats, joint transforms).
+    private(set) var multi = MultiSelection()
     private(set) var isAccessibilityTrusted = AccessibilityPermission.isTrusted
     /// Incremented each time the panel opens; HistoryView watches it to focus the search field.
     private(set) var focusRequest = 0
@@ -27,6 +29,22 @@ final class HistoryPanelModel {
     var selectedClip: Clip? {
         guard let id = selection.selectedID else { return nil }
         return clips.first { $0.id == id }
+    }
+
+    /// The clips actions apply to: all multi-selected clips (in list order), or just the
+    /// focused one.
+    var selectedClips: [Clip] {
+        if multi.isActive { return clips.filter { multi.contains($0.id) } }
+        return selectedClip.map { [$0] } ?? []
+    }
+
+    /// Stats over every number in all multi-selected clips.
+    var combinedStats: NumberStats? {
+        guard multi.isActive else { return nil }
+        let numbers = selectedClips
+            .filter { $0.content.utf16.count <= Self.maxStatsLength }
+            .flatMap { parser.parse($0.content) }
+        return NumberStats(values: numbers.map(\.value), inputFractionDigits: numbers.map(\.fractionDigits).max() ?? 0)
     }
 
     /// Stats for the selected clip, if it contains 2+ numbers.
@@ -49,6 +67,9 @@ final class HistoryPanelModel {
     // Wired up by PanelController.
     @ObservationIgnored var closePanel: () -> Void = {}
     @ObservationIgnored var pasteTarget: () -> NSRunningApplication? = { nil }
+    /// Wired up by AppEnvironment: adds clips to the running series (starting one if needed).
+    @ObservationIgnored var addToSeries: ([Clip]) -> Void = { _ in }
+    @ObservationIgnored private let parser = NumberParser()
 
     @ObservationIgnored let appInfo = AppInfoCache()
     @ObservationIgnored private let store: ClipStore
@@ -86,6 +107,7 @@ final class HistoryPanelModel {
         do {
             clips = try store.fetch(matching: query, limit: Self.fetchLimit)
             selection.update(ids: ids, resetToFirst: resetSelection)
+            if resetSelection { multi.clear() } else { multi.prune(to: ids) }
         } catch {
             errorMessage = "Couldn't load history: \(error.localizedDescription)"
         }
@@ -94,11 +116,36 @@ final class HistoryPanelModel {
     // MARK: - Selection
 
     func moveSelection(by delta: Int) {
+        multi.clear()   // arrow keys collapse a multi-selection, like in Finder
         selection.move(by: delta, in: ids)
     }
 
     func select(_ clip: Clip) {
+        multi.clear()
         if let id = clip.id { selection.select(id, in: ids) }
+    }
+
+    /// Mouse click on a row: plain click selects; ⌘-click toggles it in a multi-selection;
+    /// ⇧-click selects the range from the focused row.
+    func click(_ clip: Clip) {
+        guard let id = clip.id else { return }
+        // SwiftUI tap gestures don't report modifier keys; NSEvent knows which are held now.
+        let modifiers = NSEvent.modifierFlags
+        if modifiers.contains(.command) {
+            multi.toggle(id, focused: selection.selectedID)
+            if multi.contains(id) { selection.select(id, in: ids) }
+        } else if modifiers.contains(.shift) {
+            multi.extend(to: id, from: selection.selectedID, in: ids)
+        } else {
+            select(clip)
+        }
+    }
+
+    /// "Add to series" chip: every selected clip, included even if it mixes text.
+    func addSelectionToSeries() {
+        let chosen = selectedClips
+        guard !chosen.isEmpty else { return }
+        addToSeries(chosen)
     }
 
     // MARK: - Actions
@@ -143,10 +190,16 @@ final class HistoryPanelModel {
     /// Transform button: run it on the selected clip, copy the result, add it to history
     /// and select it, so ↩ pastes it immediately.
     func applyTransform(_ transform: any Transform) {
-        guard let clip = selectedClip else { return }
+        let chosen = selectedClips
+        guard !chosen.isEmpty else { return }
+        // Several clips: run the transform over all of them, one per line.
+        let input = chosen
+            .map { $0.content.trimmingCharacters(in: .newlines) }
+            .joined(separator: "\n")
         do {
-            let output = try transform.apply(clip.content)
+            let output = try transform.apply(input)
             let result = try monitor.copyToClipboard(newText: output)
+            multi.clear()
             reload()
             if let id = result.clip.id { selection.select(id, in: ids) }
             showToast("\(transform.title) copied · ↩ to paste")

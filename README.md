@@ -3,8 +3,8 @@
 A macOS menu-bar clipboard manager focused on numbers and data. Fully local: no
 network, no accounts, no analytics.
 
-**Status:** M3 (capture, storage, history panel, hotkey, paste, number parser, stats,
-transforms). Settings come in M4.
+**Status:** M4 step 1: capture, storage, history panel, hotkey, paste, number parser,
+stats, transforms, crystal UI, **series (running tally)**, multi-select, Settings.
 
 ## Requirements
 
@@ -35,7 +35,10 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | ⌘↩ | Copy only (don't paste) |
 | ⌘P | Pin / unpin |
 | ⌘⌫ | Delete |
+| ⌘-click / ⇧-click | Select several clips (combined stats) |
 | esc or click outside | Close |
+| ⌃⌥⌘T (anywhere) | Start / stop a series |
+| ⌃⌥⌘N (anywhere) | New series |
 
 Right-click a row for the same actions.
 
@@ -50,15 +53,44 @@ lists separated by newlines/tabs/commas/spaces, and columns pasted from Excel or
 Sheets. It ignores dates, times, versions, IPs, phone numbers and things like `A1` or
 `SKU-1234`. US formatting only for now (`1,204.50`, not `1.204,50`).
 
-Stats are per clip: copy a whole column at once. (Adding up numbers copied one at a
-time is the "running tally" mode planned for v2.)
+**Multi-select:** ⌘-click rows to pick several clips, ⇧-click for a range. Stats then
+combine every number across them, and transforms run over all of them (one per line).
+
+### Series (running tally)
+
+Start a series (⌃⌥⌘T, or the menu bar) and every number you copy, from any app, adds
+up in a small glass bar that floats near the top of the screen. Drag it anywhere.
+
+- **What counts:** copies that are *only* numbers (a value, a list, a spreadsheet column
+  or range) are added automatically. Copies that mix text and numbers ("Invoice #4512,
+  total $1,200") are listed as *skipped*: click **Add** to include one.
+- **Hybrid counting:** each copy is one row in the bar (undo removes it in one go), but
+  stats count every value: copying 50, then a column of 120/80/200 gives count 4, sum 450.
+- **New task?** After an idle gap (default 10 min) or, optionally, when numbers start
+  coming from another app, the bar *asks* whether to start a new series. It never
+  splits on its own. "Start new series" moves that copy into a fresh series.
+- Click **Σ** to copy the total; tiles copy any stat; **Copy values** copies the whole
+  column. ⌃⌥⌘N ends the series and starts a new one. Past series are kept: menu bar →
+  Recent Series copies a past total.
+- From the history panel, **Add to series** adds the selected clip(s) (starting a
+  series if none is running).
+
+### Settings (menu bar → Settings…)
+
+- **General:** rebind the panel hotkey, history limit (100–10,000), launch at login,
+  clear history.
+- **Privacy:** excluded apps (copies made in them are never saved).
+- **Series:** hotkeys, idle-gap question (off/5–60 min), ask on app switch.
+
+Launch at login registers the app where it currently lives; for a stable login item,
+copy Parseley.app to /Applications first.
 
 **Transform buttons** (result is copied, added to history and selected, so ↩ pastes it):
 Comma list · SQL IN · JSON array · Sort ↑ · Sort ↓ · Dedupe · Clean whitespace ·
 Plain numbers (strips `$` and thousands separators).
 
 Heads-up: while Parseley runs, ⌘⇧V no longer triggers "Paste and Match Style" in other
-apps. A global hotkey wins. Rebinding comes with Settings in M4.
+apps. A global hotkey wins. Rebind it in Settings → General.
 
 ## Signing & the Accessibility permission (manual steps)
 
@@ -104,8 +136,10 @@ App/                         Thin SwiftUI/AppKit shell: menu bar, floating panel
 Packages/ParseleyKit/
   Sources/ParseleyCore/      Pure Swift: Clip model, ClipStore protocol, TypeDetector,
                              PrivacyPolicy, NumberParser, NumberStats, Transforms
-                             (shared `Transform` protocol + TransformChain for recipes)
-  Sources/ParseleyStorage/   GRDBClipStore: SQLite via GRDB, migrations, retention
+                             (shared `Transform` protocol + TransformChain for recipes),
+                             Series + SeriesTracker (running-tally engine)
+  Sources/ParseleyStorage/   ParseleyDatabase (one SQLite file), GRDBClipStore,
+                             GRDBSeriesStore, migrations
   Sources/ParseleyCapture/   ClipboardMonitor (polling pipeline) + NSPasteboard adapter
   Sources/ParseleyPaste/     Simulated ⌘V (CGEvent) + Accessibility permission helpers
 ```
@@ -119,6 +153,5 @@ it with `sqlite3`: `sqlite3 ~/Library/Application\ Support/Parseley/parseley.sql
   `org.nspasteboard.TransientType` are never read or stored. Password managers
   such as 1Password and Bitwarden set these markers. A few legacy markers are also
   honoured; see `PrivacyPolicy.swift`.
-- An excluded-apps list is supported by the capture pipeline. The Settings UI for it
-  comes in M4.
+- Apps listed in Settings → Privacy are never captured.
 - Whatever is on the clipboard when Parseley launches is not imported.

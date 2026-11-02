@@ -49,18 +49,7 @@ public struct TypeDetector: Sendable {
 
     /// If the text is nothing but numbers and list separators, how many numbers it has.
     func numberOnlyCount(_ s: String) -> Int? {
-        let numbers = numberParser.parse(s)
-        guard !numbers.isEmpty else { return nil }
-        // Everything between the numbers must be separators.
-        var rest = ""
-        var cursor = s.startIndex
-        for n in numbers {
-            rest += s[cursor..<n.range.lowerBound]
-            cursor = n.range.upperBound
-        }
-        rest += s[cursor...]
-        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;|"))
-        return rest.unicodeScalars.allSatisfy(separators.contains) ? numbers.count : nil
+        numberParser.numbersOnly(s)?.count
     }
 
     func isURL(_ s: String) -> Bool {

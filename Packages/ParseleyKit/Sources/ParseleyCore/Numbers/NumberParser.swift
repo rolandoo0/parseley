@@ -58,6 +58,24 @@ public struct NumberParser: Sendable {
         return number
     }
 
+    /// The numbers in `text` if it's *nothing but* numbers and list separators (a single
+    /// value, a list, a spreadsheet column or numeric range); nil if it also has words,
+    /// dates or anything else. "1,204.50\n300" → 2 numbers; "Total: 5" → nil.
+    public func numbersOnly(_ text: String) -> [ParsedNumber]? {
+        let numbers = parse(text)
+        guard !numbers.isEmpty else { return nil }
+        // Everything between the numbers must be separators.
+        var rest = ""
+        var cursor = text.startIndex
+        for n in numbers {
+            rest += text[cursor..<n.range.lowerBound]
+            cursor = n.range.upperBound
+        }
+        rest += text[cursor...]
+        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;|"))
+        return rest.unicodeScalars.allSatisfy(separators.contains) ? numbers : nil
+    }
+
     // MARK: - Building a ParsedNumber from a regex match
 
     private func makeNumber(from match: NSTextCheckingResult, in text: String) -> ParsedNumber? {

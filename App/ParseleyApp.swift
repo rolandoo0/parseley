@@ -19,7 +19,11 @@ struct ParseleyApp: App {
             MenuContent(env: env)
         }
         // `.menu` renders the content as a native NSMenu (Buttons become menu items).
-        // In M2 the real UI is the floating panel; this menu stays as a lightweight entry point.
         .menuBarExtraStyle(.menu)
+
+        // The Settings window (opened from the menu's "Settings…").
+        Settings {
+            SettingsView(settings: env.settings, env: env)
+        }
     }
 }

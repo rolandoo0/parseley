@@ -21,6 +21,11 @@ public final class GRDBClipStore: ClipStore, @unchecked Sendable {
         try GRDBClipStore(dbQueue: DatabaseQueue(), now: now)
     }
 
+    /// Uses a shared database (the app opens one file for clips and series).
+    public convenience init(database: ParseleyDatabase, now: @escaping @Sendable () -> Date = { Date() }) throws {
+        try self.init(dbQueue: database.dbQueue, now: now)
+    }
+
     init(dbQueue: DatabaseQueue, now: @escaping @Sendable () -> Date) throws {
         self.dbQueue = dbQueue
         self.now = now
@@ -29,12 +34,7 @@ public final class GRDBClipStore: ClipStore, @unchecked Sendable {
 
     /// Default location: ~/Library/Application Support/Parseley/parseley.sqlite
     public static func defaultDatabaseURL() throws -> URL {
-        let support = try FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-        )
-        let dir = support.appendingPathComponent("Parseley", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("parseley.sqlite")
+        try ParseleyDatabase.defaultURL()
     }
 
     // MARK: - ClipStore
@@ -147,6 +147,27 @@ enum Schema {
                 t.column("createdAt", .datetime).notNull()
                 t.column("lastUsedAt", .datetime).notNull().indexed()
                 t.column("isPinned", .boolean).notNull().defaults(to: false)
+            }
+        }
+        migrator.registerMigration("v2-series") { db in
+            try db.create(table: "series") { t in
+                t.primaryKey("id", .text)                 // UUID string
+                t.column("name", .text).notNull()
+                t.column("createdAt", .datetime).notNull().indexed()
+                t.column("endedAt", .datetime)             // NULL while active
+            }
+            try db.create(table: "seriesEntry") { t in
+                t.primaryKey("id", .text)
+                // Deleting a series deletes its entries (SQLite foreign key cascade).
+                t.column("seriesId", .text).notNull().indexed()
+                    .references("series", onDelete: .cascade)
+                t.column("position", .integer).notNull()
+                t.column("clipId", .integer)               // not a foreign key: clips get trimmed
+                t.column("sourceBundleID", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("valuesJSON", .text).notNull()    // ["1204.5","300"]: exact decimals as strings
+                t.column("preview", .text).notNull()
+                t.column("isIncluded", .boolean).notNull()
             }
         }
         return migrator

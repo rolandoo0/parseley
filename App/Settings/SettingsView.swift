@@ -178,6 +178,18 @@ private struct SeriesSettings: View {
                 KeyboardShortcuts.Recorder("Start / stop series:", name: .toggleSeries)
                 KeyboardShortcuts.Recorder("New series:", name: .newSeries)
                 KeyboardShortcuts.Recorder("Copy series total:", name: .copySeriesTotal)
+                KeyboardShortcuts.Recorder("Paste series result:", name: .pasteSeriesResult)
+            }
+
+            Section("Pasting the result") {
+                Picker("⌃⌥⌘V / ⌃⌥⌘= pastes the series:", selection: $settings.seriesPasteStat) {
+                    ForEach(AppSettings.seriesPasteChoices, id: \.self) { choice in
+                        Text(choice == AppSettings.followMode ? "Mode's main stat" : choice).tag(choice)
+                    }
+                }
+                Text("⌃⌥⌘V pastes the running series' result when no paste queue is running (the queue goes first). ⌃⌥⌘= always pastes the result. With no series running, the last finished series is used. Your clipboard is left as it was.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("New series suggestions") {

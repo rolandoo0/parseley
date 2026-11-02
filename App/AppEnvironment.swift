@@ -154,7 +154,16 @@ final class AppEnvironment {
         }
         panelModel.pasteQueue = pasteQueue
         KeyboardShortcuts.onKeyUp(for: .pasteNext) { [weak self] in
-            self?.pasteQueue.pasteNext()
+            guard let self else { return }
+            // The queue wins while it runs; otherwise this pastes the series result.
+            if self.pasteQueue.isActive {
+                self.pasteQueue.pasteNext()
+            } else {
+                self.pasteSeriesResult(emptyMessage: "Nothing to paste · count a series or queue some clips")
+            }
+        }
+        KeyboardShortcuts.onKeyUp(for: .pasteSeriesResult) { [weak self] in
+            self?.pasteSeriesResult(emptyMessage: "No series to paste · start one with ⌃⌥⌘T")
         }
         KeyboardShortcuts.onKeyUp(for: .copySeriesTotal) { [weak self] in
             self?.series.copyCurrentOrLastTotal()
@@ -162,6 +171,18 @@ final class AppEnvironment {
     }
 
     // MARK: - Actions
+
+    /// Pastes the running (or last) series' result: the stat chosen in Settings › Series,
+    /// or the current mode's main stat.
+    func pasteSeriesResult(emptyMessage: String) {
+        let choice = settings.seriesPasteStat
+        let preferred = choice == AppSettings.followMode ? nil : choice
+        guard let result = series.pasteResult(preferred: preferred) else {
+            return toast.show(emptyMessage, icon: "sum")
+        }
+        let label = "\(result.item.label.lowercased()) \(result.item.display)"
+        pasteQueue.pasteOnce(result.item.copyText, label: label)
+    }
 
     func showPanel() {
         panelController.show()

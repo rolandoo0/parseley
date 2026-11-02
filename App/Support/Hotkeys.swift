@@ -20,6 +20,11 @@ extension KeyboardShortcuts.Name {
     /// Copies the running series' total (or the last series' total). Default ⌃⌥⌘C.
     static let copySeriesTotal = Self("copySeriesTotal", default: .init(.c, modifiers: [.control, .option, .command]))
 
-    /// Pastes the next item of the paste queue. Default ⌃⌥⌘V.
+    /// Pastes the next item of the paste queue; with no queue running, pastes the series
+    /// result (as `pasteSeriesResult` does). Default ⌃⌥⌘V.
     static let pasteNext = Self("pasteNext", default: .init(.v, modifiers: [.control, .option, .command]))
+
+    /// Pastes the series result (sum, or the preferred stat) into the front app, even
+    /// while a paste queue is running. Default ⌃⌥⌘= ("equals": the answer).
+    static let pasteSeriesResult = Self("pasteSeriesResult", default: .init(.equal, modifiers: [.control, .option, .command]))
 }

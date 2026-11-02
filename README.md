@@ -43,7 +43,8 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | ⌃⌥⌘T (anywhere) | Start / stop a series |
 | ⌃⌥⌘N (anywhere) | New series |
 | ⌃⌥⌘C (anywhere) | Copy the series total (or the last series' total) |
-| ⌃⌥⌘V (anywhere) | Paste the next item of the paste queue |
+| ⌃⌥⌘V (anywhere) | Paste the next item of the paste queue; with no queue, paste the series result |
+| ⌃⌥⌘= (anywhere) | Paste the series result (sum, or the stat set in Settings › Series) |
 
 Right-click a row for the same actions.
 

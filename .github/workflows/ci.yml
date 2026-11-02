@@ -37,7 +37,13 @@ jobs:
 
       - name: Package tests
         working-directory: Packages/ParseleyKit
-        run: swift test 2>&1 | tail -n 60; exit ${PIPESTATUS[0]}
+        run: |
+          status=0
+          swift test > test.log 2>&1 || status=$?
+          tail -n 25 test.log
+          # Failures and crashes can be far above the tail: print them explicitly.
+          grep -E "✘|error:|Fatal error|signal [0-9]+|crashed|Stack overflow" test.log | head -n 60 || true
+          exit $status
 
       - name: Build CLI (release)
         working-directory: Packages/ParseleyKit

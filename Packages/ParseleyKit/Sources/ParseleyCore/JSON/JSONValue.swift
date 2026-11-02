@@ -52,7 +52,7 @@ public struct JSONParseError: Error, Equatable, CustomStringConvertible, Sendabl
 extension JSONValue {
     /// Parses a complete JSON document. Leading/trailing whitespace is allowed; anything
     /// else after the value is an error.
-    public static func parse(_ text: String, maxDepth: Int = 512) throws -> JSONValue {
+    public static func parse(_ text: String, maxDepth: Int = 256) throws -> JSONValue {
         var parser = JSONTextParser(bytes: Array(text.utf8), maxDepth: maxDepth)
         return try parser.parseDocument()
     }

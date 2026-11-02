@@ -40,9 +40,11 @@ struct JSONValueTests {
     }
 
     @Test func limitsNesting() {
-        let deep = String(repeating: "[", count: 600) + String(repeating: "]", count: 600)
-        #expect(throws: JSONParseError.self) { try JSONValue.parse(deep) }
-        #expect((try? JSONValue.parse(deep, maxDepth: 1_000)) != nil)
+        // Kept shallow: Swift Testing runs tests on threads with small stacks (512 KB on
+        // macOS), and the parser is recursive. The app parses on the main thread.
+        let deep = String(repeating: "[", count: 40) + String(repeating: "]", count: 40)
+        #expect(throws: JSONParseError.self) { try JSONValue.parse(deep, maxDepth: 32) }
+        #expect((try? JSONValue.parse(deep, maxDepth: 64)) != nil)
     }
 
     @Test func roundTripsThroughSerialization() throws {

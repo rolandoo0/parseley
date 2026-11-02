@@ -29,6 +29,13 @@ struct HistoryView: View {
             if let clip = model.selectedClip {
                 Divider()
                 ClipDetailView(clip: clip)
+                if let stats = model.selectedStats {
+                    StatsStripView(stats: stats) { model.copyStat($0) }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                }
+                Divider()
+                TransformBarView { model.applyTransform($0) }
             }
             Divider()
             footer
@@ -112,10 +119,17 @@ struct HistoryView: View {
 
     private var footer: some View {
         HStack(spacing: 14) {
-            hint("↩", "Paste")
-            hint("⌘↩", "Copy")
-            hint("⌘P", "Pin")
-            hint("⌘⌫", "Delete")
+            if let toast = model.toast {
+                // Short confirmation after copying a stat or running a transform.
+                Label { Text(verbatim: toast) } icon: { Image(systemName: "checkmark.circle.fill") }
+                    .foregroundStyle(.green)
+                    .lineLimit(1)
+            } else {
+                hint("↩", "Paste")
+                hint("⌘↩", "Copy")
+                hint("⌘P", "Pin")
+                hint("⌘⌫", "Delete")
+            }
             Spacer()
             hint("esc", "Close")
         }
@@ -186,7 +200,7 @@ struct ClipRow: View {
     }
 }
 
-/// Larger preview of the selected clip. M3 adds the stats strip and transforms here.
+/// Larger preview of the selected clip.
 struct ClipDetailView: View {
     let clip: Clip
 
@@ -199,7 +213,62 @@ struct ClipDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
         }
-        .frame(height: 96)
+        .frame(height: 84)
+    }
+}
+
+/// Count · Sum · Average · Median · Min · Max. Click a tile to copy its value.
+struct StatsStripView: View {
+    let stats: NumberStats
+    let onCopy: (NumberStats.Item) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(stats.items) { item in
+                Button {
+                    onCopy(item)
+                } label: {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.label)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text(verbatim: item.display)
+                            .font(.system(.callout, design: .monospaced))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)   // shrink long numbers instead of truncating
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+                    .contentShape(Rectangle())
+                }
+                // `.plain` drops the default bordered button look so our tile styling shows.
+                .buttonStyle(.plain)
+                .help("Copy \(item.label.lowercased()): \(item.copyText)")   // tooltip
+            }
+        }
+    }
+}
+
+/// One button per transform. The result is copied, added to history, and selected,
+/// so ↩ pastes it right away.
+struct TransformBarView: View {
+    let onApply: (any Transform) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                // Iterate indices: `any Transform` isn't Identifiable/Hashable itself.
+                ForEach(TransformRegistry.all.indices, id: \.self) { index in
+                    let transform = TransformRegistry.all[index]
+                    Button(transform.title) { onApply(transform) }
+                        .controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
     }
 }
 

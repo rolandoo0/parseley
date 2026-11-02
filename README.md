@@ -3,8 +3,8 @@
 A macOS menu-bar clipboard manager focused on numbers and data. Fully local: no
 network, no accounts, no analytics.
 
-**Status:** M2 (capture, storage, history panel, hotkey, paste). The number parser,
-stats and transforms come in M3; settings in M4.
+**Status:** M3 (capture, storage, history panel, hotkey, paste, number parser, stats,
+transforms). Settings come in M4.
 
 ## Requirements
 
@@ -38,6 +38,24 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | esc or click outside | Close |
 
 Right-click a row for the same actions.
+
+### Numbers & transforms
+
+Select a clip that contains 2+ numbers and a **stats strip** appears under the preview:
+Count · Sum · Average · Median · Min · Max. Click any tile to copy its value (plain
+digits, e.g. `1492.5`, ready for a spreadsheet).
+
+The parser understands `$1,204.50`, `(300)` (negative), `12%`, `-4.5`, `1.2k`, `3M`,
+lists separated by newlines/tabs/commas/spaces, and columns pasted from Excel or Google
+Sheets. It ignores dates, times, versions, IPs, phone numbers and things like `A1` or
+`SKU-1234`. US formatting only for now (`1,204.50`, not `1.204,50`).
+
+Stats are per clip: copy a whole column at once. (Adding up numbers copied one at a
+time is the "running tally" mode planned for v2.)
+
+**Transform buttons** (result is copied, added to history and selected, so ↩ pastes it):
+Comma list · SQL IN · JSON array · Sort ↑ · Sort ↓ · Dedupe · Clean whitespace ·
+Plain numbers (strips `$` and thousands separators).
 
 Heads-up: while Parseley runs, ⌘⇧V no longer triggers "Paste and Match Style" in other
 apps. A global hotkey wins. Rebinding comes with Settings in M4.
@@ -85,8 +103,8 @@ Or open `Packages/ParseleyKit/Package.swift` in Xcode and press ⌘U.
 App/                         Thin SwiftUI/AppKit shell: menu bar, floating panel, hotkey
 Packages/ParseleyKit/
   Sources/ParseleyCore/      Pure Swift: Clip model, ClipStore protocol, TypeDetector,
-                             PrivacyPolicy, list selection/placement logic
-                             (later: NumberParser, Stats, Transforms)
+                             PrivacyPolicy, NumberParser, NumberStats, Transforms
+                             (shared `Transform` protocol + TransformChain for recipes)
   Sources/ParseleyStorage/   GRDBClipStore: SQLite via GRDB, migrations, retention
   Sources/ParseleyCapture/   ClipboardMonitor (polling pipeline) + NSPasteboard adapter
   Sources/ParseleyPaste/     Simulated ⌘V (CGEvent) + Accessibility permission helpers

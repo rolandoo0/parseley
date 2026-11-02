@@ -2,9 +2,11 @@ import Foundation
 
 /// Classifies clip text into a `ClipKind`.
 ///
-/// M1 detects url / email / json / table / text. Number kinds are added in M3, once the
-/// number parser exists. Detection is deliberately conservative: when unsure, `.text`.
+/// Detection is deliberately conservative: when unsure, `.text`. Note the stats strip
+/// doesn't depend on the kind: any clip with 2+ numbers gets stats, even prose.
 public struct TypeDetector: Sendable {
+    private let numberParser = NumberParser()
+
     public init() {}
 
     public func detect(_ content: String) -> ClipKind {
@@ -18,6 +20,9 @@ public struct TypeDetector: Sendable {
         if trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil {
             if isURL(trimmed) { return .url }
             if isEmail(trimmed) { return .email }
+        }
+        if let count = numberOnlyCount(trimmed) {
+            return count == 1 ? .number : .numberList
         }
         return .text
     }
@@ -40,6 +45,22 @@ public struct TypeDetector: Sendable {
         let columnCounts = rows.map { $0.split(separator: "\t", omittingEmptySubsequences: false).count }
         guard let firstCount = columnCounts.first, firstCount >= 2 else { return false }
         return columnCounts.allSatisfy { $0 == firstCount }
+    }
+
+    /// If the text is nothing but numbers and list separators, how many numbers it has.
+    func numberOnlyCount(_ s: String) -> Int? {
+        let numbers = numberParser.parse(s)
+        guard !numbers.isEmpty else { return nil }
+        // Everything between the numbers must be separators.
+        var rest = ""
+        var cursor = s.startIndex
+        for n in numbers {
+            rest += s[cursor..<n.range.lowerBound]
+            cursor = n.range.upperBound
+        }
+        rest += s[cursor...]
+        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;|"))
+        return rest.unicodeScalars.allSatisfy(separators.contains) ? numbers.count : nil
     }
 
     func isURL(_ s: String) -> Bool {

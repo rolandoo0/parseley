@@ -21,10 +21,23 @@ final class HistoryPanelModel {
     /// Incremented each time the panel opens; HistoryView watches it to focus the search field.
     private(set) var focusRequest = 0
     private(set) var errorMessage: String?
+    /// Brief confirmation shown in the footer ("Copied Sum: 1,492.5"). Clears itself.
+    private(set) var toast: String?
 
     var selectedClip: Clip? {
         guard let id = selection.selectedID else { return nil }
         return clips.first { $0.id == id }
+    }
+
+    /// Stats for the selected clip, if it contains 2+ numbers.
+    var selectedStats: NumberStats? {
+        guard let clip = selectedClip, let id = clip.id else { return nil }
+        if let cached = statsCache[id] { return cached }
+        // Very large clips: skip, to keep the panel instant.
+        let stats = clip.content.utf16.count <= Self.maxStatsLength ? NumberStats(text: clip.content) : nil
+        let result = (stats?.count ?? 0) >= 2 ? stats : nil
+        statsCache[id] = result   // clip content never changes, so caching by id is safe
+        return result
     }
 
     // Wired up by PanelController.
@@ -36,6 +49,10 @@ final class HistoryPanelModel {
     @ObservationIgnored private let monitor: ClipboardMonitor
     @ObservationIgnored private let pasteService = PasteService()
     @ObservationIgnored private var hasPromptedForAccessibility = false
+    @ObservationIgnored private var statsCache: [Int64: NumberStats?] = [:]
+    @ObservationIgnored private var toastTask: Task<Void, Never>?
+
+    static let maxStatsLength = 200_000
 
     /// How many clips the panel lists. Search always runs over the whole history.
     static let fetchLimit = 300
@@ -102,6 +119,46 @@ final class HistoryPanelModel {
                 hasPromptedForAccessibility = true
                 AccessibilityPermission.requestWithSystemPrompt()
             }
+        }
+    }
+
+    /// Click on a stat tile: copy its plain value (it also lands in history). The panel
+    /// stays open with the original clip selected.
+    func copyStat(_ item: NumberStats.Item) {
+        do {
+            try monitor.copyToClipboard(newText: item.copyText)
+            reload()
+            showToast("Copied \(item.label.lowercased()): \(item.display)")
+        } catch {
+            errorMessage = "Couldn't copy: \(error.localizedDescription)"
+        }
+    }
+
+    /// Transform button: run it on the selected clip, copy the result, add it to history
+    /// and select it, so ↩ pastes it immediately.
+    func applyTransform(_ transform: any Transform) {
+        guard let clip = selectedClip else { return }
+        do {
+            let output = try transform.apply(clip.content)
+            let result = try monitor.copyToClipboard(newText: output)
+            reload()
+            if let id = result.clip.id { selection.select(id, in: ids) }
+            showToast("\(transform.title) copied · ↩ to paste")
+        } catch let error as TransformError {
+            showToast(error.message)
+        } catch {
+            errorMessage = "\(transform.title) failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toast = message
+        toastTask?.cancel()
+        // A Task with sleep is the modern way to "do this later" on the main actor.
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.toast = nil
         }
     }
 

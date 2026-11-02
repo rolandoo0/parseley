@@ -13,7 +13,7 @@ final class PanelController {
     /// The app that was frontmost when the panel opened: where Enter will paste.
     private var previousApp: NSRunningApplication?
 
-    private static let defaultSize = NSSize(width: 560, height: 480)
+    private static let defaultSize = NSSize(width: 600, height: 580)
 
     init(model: HistoryPanelModel) {
         self.model = model

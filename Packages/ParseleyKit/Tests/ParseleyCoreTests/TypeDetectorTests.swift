@@ -80,6 +80,36 @@ import Testing
         #expect(detector.detect(input) != .table)
     }
 
+    @Test(arguments: ["42", "$1,204.50", "(300)", "12%", " 1.2k \n"])
+    func singleNumber(_ input: String) {
+        #expect(detector.detect(input) == .number)
+    }
+
+    @Test(arguments: [
+        "1\n2\n3",
+        "$1,204.50\r\n300\r\n(12)\r\n",
+        "1, 2, 3",
+        "4 8 15 16",
+        "1;2|3",
+    ])
+    func numberLists(_ input: String) {
+        #expect(detector.detect(input) == .numberList)
+    }
+
+    @Test(arguments: [
+        "Total: 5",
+        "12 apples, 3 pears",
+        "2024-01-05",          // dates aren't numbers
+        "1.2.3",
+    ])
+    func textWithNumbersIsStillText(_ input: String) {
+        #expect(detector.detect(input) == .text)
+    }
+
+    @Test func numericSpreadsheetRangeIsATable() {
+        #expect(detector.detect("1\t2\n3\t4") == .table)
+    }
+
     @Test(arguments: ["", "   ", "\n\t", "hello world", "multi\nline\ntext"])
     func plainText(_ input: String) {
         #expect(detector.detect(input) == .text)

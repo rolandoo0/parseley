@@ -121,6 +121,8 @@ final class PanelController {
             model.deleteSelected()
         case kVK_ANSI_P where modifiers == .command && !model.isCommandMode:   // ⌘P
             model.togglePin()
+        case kVK_ANSI_J where modifiers == .command && !model.isCommandMode:   // ⌘J
+            model.visualizeSelection()
         case let code where modifiers == .command && Self.statKeys.keys.contains(code):  // ⌘1–⌘6
             model.copyStat(at: Self.statKeys[code] ?? 0)
         default:

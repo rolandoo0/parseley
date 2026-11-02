@@ -31,6 +31,7 @@ final class AppEnvironment {
     @ObservationIgnored let recipes: RecipeController
     @ObservationIgnored let toast: ToastController
     @ObservationIgnored let pasteQueue: PasteQueueController
+    @ObservationIgnored let jsonGraph: JSONGraphController
     @ObservationIgnored let onboarding = OnboardingController()
     @ObservationIgnored let panelModel: HistoryPanelModel
     @ObservationIgnored let panelController: PanelController
@@ -88,6 +89,8 @@ final class AppEnvironment {
         self.recipes = recipes
         self.toast = toast
         self.pasteQueue = PasteQueueController(monitor: monitor, toast: toast)
+        // Copying from the graph (a path, a subtree) goes through history like any copy.
+        self.jsonGraph = JSONGraphController(copyText: { text in _ = try? monitor.copyToClipboard(newText: text) })
         self.panelModel = panelModel
         self.panelController = PanelController(model: panelModel)
         self.series = series
@@ -153,6 +156,7 @@ final class AppEnvironment {
             self?.series.startNew()
         }
         panelModel.pasteQueue = pasteQueue
+        panelModel.onVisualizeJSON = { [weak self] text, title in self?.jsonGraph.show(text: text, title: title) }
         KeyboardShortcuts.onKeyUp(for: .pasteNext) { [weak self] in
             guard let self else { return }
             // The queue wins while it runs; otherwise this pastes the series result.
@@ -207,6 +211,14 @@ final class AppEnvironment {
 
     func showPanel() {
         panelController.show()
+    }
+
+    /// Menu bar → "Visualize Clipboard JSON": draws whatever JSON is on the clipboard now.
+    func visualizeClipboardJSON() {
+        guard let text = monitor.currentText, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return toast.show("The clipboard is empty", icon: "curlybraces")
+        }
+        jsonGraph.show(text: text, title: ClipPreview.title(text, maxLength: 60))
     }
 
     var isAccessibilityTrusted: Bool { AccessibilityPermission.isTrusted }

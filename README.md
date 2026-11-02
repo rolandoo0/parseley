@@ -64,6 +64,7 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | ↩ or double-click | Paste the clip into the app you were in |
 | ⌘↩ | Copy only (don't paste) |
 | ⌘P | Pin / unpin |
+| ⌘J | Visualize the selected JSON clip as a graph |
 | ⌘⌫ | Delete |
 | ⌘-click / ⇧-click | Select several clips (combined stats) |
 | ⌘1 – ⌘6 | Copy a stat (⌘1 = the mode's main stat) |
@@ -153,6 +154,25 @@ When a series ends (Stop, New series, or splitting at a prompt) its total is sav
 your history as a **Series total** clip: `Σ 4,210.50 · Q3 expenses · 12 values`.
 Pasting it pastes the number. Series totals are never removed by the history limit or
 "Clear All but Pinned".
+
+### JSON visualizer
+
+Copy some JSON, open the panel, and click **Visualize** (or press ⌘J, or type
+`>visualize`). The menu bar's **Visualize Clipboard JSON** draws whatever is on the
+clipboard. It opens a graph window:
+
+- every object is a card listing its values (strings, numbers, booleans and null in
+  their own colors); nested objects and arrays are linked cards, left to right;
+- drag or scroll to pan, pinch or ⌘-scroll to zoom, ⌘0 to fit;
+- click a card to inspect it: its path (`$.orders[0].total`) and full JSON, with
+  **Copy path** and **Copy JSON**;
+- click a card's ± handle (or double-click the card) to collapse or expand it;
+  **Collapse all** / **Expand all** in the toolbar; very large documents open with
+  deeper levels collapsed;
+- ⌘F searches keys and values (↩ jumps to the next match).
+
+Key order and numbers are kept exactly as written (`1.10` stays `1.10`). Invalid JSON
+shows where the error is (line and column). Everything runs locally.
 
 ### Tour video
 

@@ -230,6 +230,10 @@ struct HistoryView: View {
             }
 
             HStack(spacing: 6) {
+                if model.canVisualizeJSON {
+                    TransformChip(title: "Visualize", icon: "point.3.connected.trianglepath.dotted") { model.visualizeSelection() }
+                        .help("Open this JSON as a graph (⌘J)")
+                }
                 TransformChip(title: "Add to series", icon: "sum") { model.addSelectionToSeries() }
                     .help("Add the selected clip(s) to the running series (starts one if needed)")
                 if model.multi.isActive {

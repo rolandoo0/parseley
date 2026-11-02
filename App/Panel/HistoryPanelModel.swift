@@ -192,6 +192,9 @@ final class HistoryPanelModel {
 
     // MARK: - Dependencies
 
+    /// Opens JSON text as a graph (text, title); set by AppEnvironment.
+    @ObservationIgnored var onVisualizeJSON: ((String, String) -> Void)?
+
     /// Welcome-tour hooks (set by AppEnvironment).
     @ObservationIgnored var onStatCopied: (() -> Void)?
     @ObservationIgnored var onCommandRun: (() -> Void)?
@@ -333,6 +336,20 @@ final class HistoryPanelModel {
         query = ""            // leave the command bar first…
         if copyOnly, let copy = command.copy { copy() } else { command.run() }   // …so its toast sticks
         onCommandRun?()
+    }
+
+    /// True when the focused clip is JSON (shows the Visualize button, enables ⌘J).
+    var canVisualizeJSON: Bool { !multi.isActive && selectedSummary?.kind == .json }
+
+    /// Visualize button / ⌘J: open the focused JSON clip as a graph.
+    func visualizeSelection() {
+        guard canVisualizeJSON, let clip = selectedClip else { return }
+        visualize(clip)
+    }
+
+    private func visualize(_ clip: Clip) {
+        closePanel()
+        onVisualizeJSON?(clip.content, ClipPreview.title(clip.content, maxLength: 60))
     }
 
     /// Command bar ⏎ on a number: close the panel and paste it into the app you were in.
@@ -485,6 +502,15 @@ final class HistoryPanelModel {
                     copy: { [weak self] in self?.copyStat(sum) }
                 ) { [weak self] in self?.pasteValue(sum) })
             }
+        }
+
+        // JSON graph.
+        if targets.count == 1, let target = targets.first, target.kind == .json {
+            list.append(PanelCommand(id: "json.graph", title: "Visualize JSON", detail: "Graph · ⌘J",
+                                     icon: "point.3.connected.trianglepath.dotted",
+                                     keywords: "graph tree view diagram crack open") { [weak self] in
+                self?.visualize(target)
+            })
         }
 
         // Paste queue.

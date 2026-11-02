@@ -21,7 +21,7 @@ final class ToastController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false   // the system shadow shows as a dark outline; the glass rim replaces it
         panel.ignoresMouseEvents = true   // purely informational; clicks pass through
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = NSHostingView(rootView: ToastView(model: model))

@@ -35,8 +35,13 @@ enum Theme {
     )
     /// Bright top-left edge fading out toward the bottom-right: light catching the glass.
     static let edgeGradient = LinearGradient(
-        colors: [.white.opacity(0.55), .white.opacity(0.08), cyan.opacity(0.28)],
+        colors: [.white.opacity(0.75), .white.opacity(0.32), cyan.opacity(0.55)],
         startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+    /// Faint inner rim just inside the edge: the thickness of the glass.
+    static let innerRim = LinearGradient(
+        colors: [.white.opacity(0.22), .white.opacity(0.06), .white.opacity(0.14)],
+        startPoint: .top, endPoint: .bottom
     )
     /// A thin glowing line used as a section divider.
     static let glowLine = LinearGradient(
@@ -121,7 +126,10 @@ struct CrystalBackground: View {
             )
         }
         .clipShape(shape)
-        .overlay(shape.strokeBorder(Theme.edgeGradient, lineWidth: 1))
+        // A glass rim instead of a dark outline: bright outer edge + soft inner highlight.
+        // (The windows have no system shadow; macOS draws that as a dark rim.)
+        .overlay(shape.strokeBorder(Theme.edgeGradient, lineWidth: 1.25))
+        .overlay(shape.inset(by: 1.25).strokeBorder(Theme.innerRim, lineWidth: 1))
     }
 }
 

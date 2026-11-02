@@ -51,8 +51,6 @@ final class PanelController {
             context.duration = 0.14
             self.panel.animator().alphaValue = 1
         }
-        // The shadow is computed from the window's pixels; recompute once content is drawn.
-        DispatchQueue.main.async { [weak self] in self?.panel.invalidateShadow() }
         installKeyMonitor()
         onShow?()
     }

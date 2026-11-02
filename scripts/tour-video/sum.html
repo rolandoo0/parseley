@@ -1,0 +1,218 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}
+body{margin:0;width:1280px;height:720px;overflow:hidden;font-family:-apple-system,"SF Pro Text","Inter","Helvetica Neue",Arial,sans-serif;
+ background:radial-gradient(1200px 700px at 20% 10%,#2a3a6b 0%,#141a33 45%,#0c1022 100%);color:#fff}
+.abs{position:absolute}
+.fade{transition:none}
+/* caption */
+#cap{left:0;right:0;top:34px;text-align:center;font-size:30px;font-weight:700;letter-spacing:-.01em;text-shadow:0 2px 18px rgba(0,0,0,.5)}
+#cap small{display:block;font-size:18px;font-weight:500;color:#b9c3e6;margin-top:6px}
+/* key overlay */
+#keys{left:0;right:0;bottom:36px;display:flex;justify-content:center;gap:10px}
+.key{min-width:64px;height:64px;padding:0 18px;border-radius:14px;background:linear-gradient(#fafbff,#d9deec);color:#151a2c;
+ font-size:30px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 0 #9aa3bd,0 10px 30px rgba(0,0,0,.45)}
+/* mac window */
+.win{background:#fbfbfd;color:#1b1f2b;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.55);overflow:hidden}
+.bar{height:34px;background:#ececf1;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:13px;color:#5a6075}
+.dot{width:12px;height:12px;border-radius:50%}
+/* sheet */
+table{border-collapse:collapse;font-size:17px}
+td{border:1px solid #e0e3ea;height:40px;padding:0 12px;min-width:120px}
+td.h{background:#f3f4f8;color:#6a7086;font-size:13px;text-align:center;min-width:40px}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+#selbox{border:3px solid #1f7aff;background:rgba(31,122,255,.12);border-radius:2px}
+/* email */
+#email .body{padding:26px 30px;font-size:22px;line-height:1.6}
+.caret{display:inline-block;width:2px;height:26px;background:#1f7aff;vertical-align:-5px;margin-left:1px}
+.pasted{background:rgba(91,212,135,.35);border-radius:4px;padding:0 3px}
+/* panel */
+#panel{left:320px;top:120px;width:640px;height:470px;border-radius:22px;background:rgba(12,17,34,.93);
+ border:1.5px solid rgba(255,255,255,.35);box-shadow:0 0 0 1px rgba(94,231,255,.15),0 40px 90px rgba(0,0,0,.6);overflow:hidden}
+#panel .head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.1)}
+#panel .head img{width:30px;height:30px}
+#q{font-size:22px;font-weight:500;flex:1;color:#eef1ff}
+#q .ph{color:rgba(255,255,255,.45)}
+.row{display:flex;align-items:center;gap:12px;margin:3px 10px;padding:11px 14px;border-radius:10px;font-size:16px}
+.row.sel{background:linear-gradient(90deg,rgba(94,231,255,.22),rgba(158,140,255,.16));outline:1px solid rgba(94,231,255,.45)}
+.badge{font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:999px}
+.b-text{color:#cfd3e3;background:rgba(255,255,255,.1)}
+.b-link{color:#b9adff;background:rgba(158,140,255,.16)}
+.b-num{color:#5ee7ff;background:rgba(94,231,255,.14)}
+.sub{font-size:12.5px;color:rgba(255,255,255,.62);margin-top:3px}
+.grow{flex:1;min-width:0}
+.val{font-family:"SF Mono",Menlo,Consolas,monospace;font-weight:700;font-size:18px;color:#fff}
+.hint{font-size:11.5px;color:rgba(255,255,255,.6);display:flex;align-items:center;gap:5px;margin-right:8px}
+.kc{font-size:11px;font-weight:700;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:#dfe4f5}
+#cmdhead{font-size:12.5px;color:rgba(255,255,255,.7);padding:9px 20px 4px}
+#foot{position:absolute;left:0;right:0;bottom:0;padding:10px 18px;border-top:1px solid rgba(255,255,255,.1);display:flex;gap:16px;font-size:12px;color:rgba(255,255,255,.6)}
+/* cards */
+.card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:26px;width:330px}
+.card .n{font-size:15px;font-weight:800;color:#5bd487;letter-spacing:.1em}
+.card .k{margin:14px 0 10px;display:flex;gap:8px}
+.card .k .key{min-width:52px;height:52px;font-size:24px;box-shadow:0 5px 0 #9aa3bd}
+.card .t{font-size:20px;line-height:1.35;color:#e6eaff}
+#toast{left:50%;top:500px;transform:translateX(-50%);padding:10px 18px;border-radius:22px;background:rgba(12,17,34,.92);border:1px solid rgba(255,255,255,.35);font-size:15px;font-weight:600;color:#9bf0b6;display:flex;gap:8px;align-items:center}
+</style></head>
+<body>
+
+<!-- Title -->
+<div id="title" class="abs" style="left:0;right:0;top:200px;text-align:center">
+  <img src="LOGO" style="width:150px;height:150px">
+  <div style="font-size:54px;font-weight:800;letter-spacing:-.02em;margin-top:10px">How <span style="font-family:Menlo,monospace;color:#5ee7ff">&gt;sum</span> works</div>
+  <div style="font-size:24px;color:#b9c3e6;margin-top:10px">Add up numbers you copied earlier, and paste the total where you're typing.</div>
+</div>
+
+<!-- Spreadsheet -->
+<div id="sheet" class="abs win" style="left:340px;top:150px;width:600px">
+  <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:12px">Expenses.xlsx</span></div>
+  <div style="padding:18px 24px 26px;position:relative">
+    <table style="width:100%">
+      <tr><td class="h"></td><td class="h">A</td><td class="h">B</td></tr>
+      <tr><td class="h">1</td><td>Item</td><td>Amount</td></tr>
+      <tr><td class="h">2</td><td>Flights</td><td class="n" id="b2">1,204.50</td></tr>
+      <tr><td class="h">3</td><td>Hotel</td><td class="n">380.00</td></tr>
+      <tr><td class="h">4</td><td>Taxis</td><td class="n">92.00</td></tr>
+      <tr><td class="h">5</td><td>Conference</td><td class="n" id="b5">815.25</td></tr>
+    </table>
+    <div id="selbox" class="abs"></div>
+  </div>
+</div>
+<div id="toast" class="abs">✓ Saved in Parseley's history</div>
+
+<!-- Email -->
+<div id="email" class="abs win" style="left:240px;top:140px;width:800px;height:440px">
+  <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:12px">New Message — To: Sam</span></div>
+  <div class="body"><span id="etext"></span><span id="epaste"></span><span id="caret" class="caret"></span></div>
+</div>
+
+<!-- Panel -->
+<div id="panel" class="abs">
+  <div class="head"><img src="LOGO"><div id="q"></div></div>
+  <div id="list"></div>
+  <div id="foot"></div>
+</div>
+
+<!-- Recap -->
+<div id="recap" class="abs" style="left:0;right:0;top:150px;display:flex;justify-content:center;gap:24px">
+  <div class="card"><div class="n">1 · OPEN</div><div class="k"><div class="key">⌘</div><div class="key">⇧</div><div class="key">V</div></div><div class="t">Open your clipboard history, from any app.</div></div>
+  <div class="card"><div class="n">2 · PICK</div><div class="k"><div class="key">↓</div></div><div class="t">Select the clip that has your numbers.</div></div>
+  <div class="card"><div class="n">3 · TOTAL</div><div class="k"><div class="key" style="font-family:Menlo,monospace">&gt;sum</div><div class="key">⏎</div></div><div class="t">The total is pasted where you were typing.</div></div>
+</div>
+<div id="tip" class="abs" style="left:0;right:0;top:470px;text-align:center;font-size:21px;color:#c9d1f0">
+  Just copied the numbers? Skip the panel: press <b style="color:#5ee7ff">⌃⌥⌘V</b> to paste their sum.<br>
+  <span style="font-size:17px;color:#9aa6cc">Use <b>&gt;sum</b> for numbers you copied a while ago, or several clips at once (⌘-click).</span>
+</div>
+
+<div id="cap" class="abs"></div>
+<div id="keys" class="abs"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const clamp = (x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ramp = (t,a,b)=>clamp((t-a)/(b-a));               // 0→1 between a and b
+const win = (t,a,b,f=0.35)=>Math.min(ramp(t,a,a+f), 1-ramp(t,b-f,b)); // fade in at a, out at b
+function show(el,o,dy=0){ el.style.opacity=o; el.style.visibility=o<=0.001?'hidden':'visible'; el.style.transform=(el.dataset.base||'')+` translateY(${(1-o)*dy}px)`; }
+
+const scenes = [
+  // [start, end, caption, sub]
+  [3.0, 8.0, 'Earlier: you copy some numbers', 'From a spreadsheet, a report, an email…'],
+  [8.0, 11.2, 'Later, you need their total somewhere else', 'You’re writing an email and the cursor is waiting.'],
+  [11.2, 13.0, 'Open your clipboard history', 'Press ⌘⇧V. The email stays where it is, behind the panel.'],
+  [13.0, 15.0, 'Pick the clip with your numbers', 'Arrow down to it. Here it’s the 4 amounts from the spreadsheet.'],
+  [15.0, 18.4, 'Type >sum', 'Parseley adds them up instantly: 2,491.75'],
+  [18.4, 21.5, 'Press ⏎ to paste the total', 'The panel closes and the number lands where you were typing.'],
+];
+const keyTimes = [
+  [5.2, 6.4, ['⌘','C']],
+  [11.4, 12.6, ['⌘','⇧','V']],
+  [13.4, 13.9, ['↓']],
+  [14.0, 14.6, ['↓']],
+  [15.15, 16.7, ['>','s','u','m']],
+  [18.45, 19.4, ['⏎']],
+];
+
+const clips = [
+  {badge:'TEXT',cls:'b-text',title:'Lunch at 12:30 with the team',sub:'Notes · 2 min ago'},
+  {badge:'LINK',cls:'b-link',title:'https://example.com/q1-report',sub:'Safari · 9 min ago'},
+  {badge:'NUMBERS',cls:'b-num',title:'1,204.50  380.00  92.00  815.25',sub:'Excel · 40 min ago  ·  Σ 2,491.75 · 4 values'},
+];
+const stats = [['Sum','2,491.75','∑'],['Average','622.9375','#'],['Count','4','#'],['Median','597.625','#'],['Min','92','#'],['Max','1,204.5','#']];
+const otherCmds = [['Sort ascending','Transform'],['Comma list','Transform'],['SQL IN (…)','Transform'],['Copy series total','Series'],['Add to series','Series']];
+
+function renderPanel(t){
+  const typed = '>sum'.slice(0, t<15.2?0: t<15.5?1: t<15.8?2: t<16.1?3:4);
+  const q = $('q');
+  q.innerHTML = typed ? typed.replace('>','&gt;')+'<span class="caret" style="background:#5ee7ff;height:22px"></span>' : '<span class="ph">Search your clipboard</span>';
+  const list = $('list'); let html='';
+  if(!typed){
+    const sel = t<13.6?0: t<14.2?1:2;
+    clips.forEach((c,i)=>{ html+=`<div class="row ${i===sel?'sel':''}"><span class="badge ${c.cls}">${c.badge}</span><div class="grow"><div>${c.title}</div><div class="sub">${c.sub}</div></div></div>`; });
+    $('foot').innerHTML='<span><span class="kc">⏎</span> Paste</span><span><span class="kc">⌘⏎</span> Copy</span><span><span class="kc">&gt;</span> Commands</span>';
+  } else {
+    const word = typed.slice(1);
+    html += `<div id="cmdhead">Run on “1,204.50  380.00  92.00…”</div>`;
+    let rows = stats.map(s=>({t:s[0],d:s[1],v:true,i:s[2]})).concat(otherCmds.map(c=>({t:c[0],d:c[1],v:false,i:'›'})));
+    if(word){
+      const kw = {Sum:'sum total add',Average:'average mean',Count:'count',Median:'median',Min:'min',Max:'max','Copy series total':'copy series total sum','Add to series':'add to series sum tally','Sort ascending':'sort ascending','Comma list':'comma list','SQL IN (…)':'sql in'};
+      rows = rows.filter(r=>{ const s=(kw[r.t]||r.t).toLowerCase(); let i=0; for(const ch of s){ if(ch===word[i]) i++; } return i===word.length; });
+      rows.sort((a,b)=> (b.t.toLowerCase().startsWith(word)?1:0)-(a.t.toLowerCase().startsWith(word)?1:0));
+    }
+    rows.slice(0,7).forEach((r,i)=>{
+      const sel=i===0;
+      html+=`<div class="row ${sel?'sel':''}" style="padding:9px 14px"><span style="width:20px;color:${sel?'#5ee7ff':'rgba(255,255,255,.6)'};font-weight:700">${r.i}</span><div class="grow">${r.t}</div>`+
+        (r.v ? (sel?'<span class="hint"><span class="kc">⏎</span>paste<span class="kc">⌘⏎</span>copy</span>':'')+`<span class="val" style="${sel&&word?'font-size:22px;color:#9bf0b6':''}">${r.d}</span>` : `<span style="font-size:12px;color:rgba(255,255,255,.5)">${r.d}</span>`)+`</div>`;
+    });
+    $('foot').innerHTML='<span><span class="kc">↑↓</span> Choose</span><span><span class="kc">⏎</span> Run / paste number</span><span><span class="kc">⌘⏎</span> Copy number</span>';
+  }
+  list.innerHTML = html;
+}
+
+function render(t){
+  // title
+  show($('title'), win(t,0,3.0,0.5), 20);
+  // spreadsheet
+  show($('sheet'), win(t,3.0,8.2,0.45), 30);
+  const sb=$('selbox'); const p=ramp(t,4.0,4.9);
+  // cells B2..B5: table cell geometry
+  // Measure the real cells (relative to the selection box's container).
+  const host=sb.parentElement.getBoundingClientRect(), b2=$('b2').getBoundingClientRect(), b5=$('b5').getBoundingClientRect();
+  const k = 1;  // layout is unscaled while measuring
+  sb.style.left=(b2.left-host.left)+'px'; sb.style.top=(b2.top-host.top)+'px'; sb.style.width=b2.width+'px';
+  sb.style.height=(b2.height+(b5.bottom-b2.bottom)*p)+'px'; sb.style.opacity = t>=4.0?1:0;
+  show($('toast'), win(t,5.9,7.6,0.25), -10);
+  // email
+  show($('email'), win(t,8.0,21.5,0.45), 30);
+  const full='Hi Sam,<br><br>Our Q1 travel total is ';
+  const plain='Hi Sam,\n\nOur Q1 travel total is ';
+  const n=Math.floor(ramp(t,8.4,10.6)*plain.length);
+  $('etext').innerHTML = plain.slice(0,n).replace(/\n/g,'<br>');
+  const pasted = t>=19.1;
+  $('epaste').innerHTML = pasted ? `<span class="pasted" style="background:rgba(91,212,135,${0.45*(1-ramp(t,20.2,21.2))})">2491.75</span>.` : '';
+  $('caret').style.opacity = (Math.floor(t*2)%2===0 || (t>8.4&&t<10.6)) ? 1 : 0;
+  // panel
+  const po = Math.min(ramp(t,11.75,12.05), 1-ramp(t,18.6,18.9));
+  const panel=$('panel'); panel.dataset.base=''; show(panel, po, 0);
+  panel.style.transform=`scale(${0.97+0.03*po})`;
+  if(po>0) renderPanel(t);
+  // recap
+  show($('recap'), win(t,21.6,27,0.5), 24);
+  show($('tip'), win(t,22.6,27,0.5), 16);
+  // captions
+  let cap=''; let co=0;
+  for(const [a,b,c,s] of scenes){ if(t>=a&&t<b){ cap=`${c}<small>${s}</small>`; co=win(t,a,b,0.3);} }
+  if(t>=21.6){ cap='The whole thing in 3 steps'; co=win(t,21.6,27,0.5); }
+  $('cap').innerHTML=cap; show($('cap'),co,-8);
+  // keys
+  let kh=''; let ko=0;
+  for(const [a,b,ks] of keyTimes){ if(t>=a&&t<b){
+    let shown=ks;
+    if(ks.length===4 && ks[0]==='>'){ const k=t<15.5?1:t<15.8?2:t<16.1?3:4; shown=ks.slice(0,k); }
+    kh=shown.map(k=>`<div class="key">${k}</div>`).join(''); ko=win(t,a,b,0.12);} }
+  $('keys').innerHTML=kh; show($('keys'),ko,10);
+}
+window.render=render;
+render(0);
+</script>
+</body></html>

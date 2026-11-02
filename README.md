@@ -125,6 +125,13 @@ your history as a **Series total** clip: `Σ 4,210.50 · Q3 expenses · 12 value
 Pasting it pastes the number. Series totals are never removed by the history limit or
 "Clear All but Pinned".
 
+### Tour video
+
+The welcome guide (menu bar → Welcome Guide…) has a "Watch the tour" button that plays
+`App/Resources/ParseleyTour.mp4`, a 90-second walkthrough of every feature. The video is
+generated from `scripts/tour-video/tour.html`; after changing a feature, edit the scene
+and run `node scripts/tour-video/render.js` (needs Playwright and ffmpeg).
+
 ### Command bar
 
 Type `>` in the panel's search field. The numbers of the selected clip(s) come first:

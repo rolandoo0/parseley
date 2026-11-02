@@ -2,18 +2,37 @@ import Foundation
 import GRDB
 import ParseleyCore
 
-/// One SQLite database file shared by the clip and series stores (and, later, a CLI or
-/// MCP server). Opening it runs all migrations.
+/// One SQLite database file shared by the clip and series stores, the CLI and the MCP
+/// server. The app opens it read-write (running migrations); tools open it read-only.
 public final class ParseleyDatabase: @unchecked Sendable {
     let dbQueue: DatabaseQueue
+    public let isReadOnly: Bool
 
-    public init(path: String) throws {
-        dbQueue = try DatabaseQueue(path: path)
-        try Schema.migrator.migrate(dbQueue)
+    /// - Parameter readOnly: open without write access and without migrating (for the
+    ///   CLI / MCP server while the app keeps writing). Waits up to 3 s if the app is
+    ///   mid-write.
+    public init(path: String, readOnly: Bool = false) throws {
+        var configuration = Configuration()
+        configuration.readonly = readOnly
+        configuration.busyMode = .timeout(3)
+        if readOnly, !FileManager.default.fileExists(atPath: path) {
+            throw ParseleyDatabaseError.notFound(path)
+        }
+        dbQueue = try DatabaseQueue(path: path, configuration: configuration)
+        isReadOnly = readOnly
+        if readOnly {
+            let applied = try dbQueue.read { try Schema.migrator.appliedMigrations($0) }
+            guard Set(applied).isSuperset(of: Schema.migrator.migrations) else {
+                throw ParseleyDatabaseError.needsUpgrade
+            }
+        } else {
+            try Schema.migrator.migrate(dbQueue)
+        }
     }
 
     private init(queue: DatabaseQueue) throws {
         dbQueue = queue
+        isReadOnly = false
         try Schema.migrator.migrate(dbQueue)
     }
 
@@ -30,6 +49,18 @@ public final class ParseleyDatabase: @unchecked Sendable {
         let dir = support.appendingPathComponent("Parseley", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("parseley.sqlite")
+    }
+}
+
+public enum ParseleyDatabaseError: Error, CustomStringConvertible {
+    case notFound(String)
+    case needsUpgrade
+
+    public var description: String {
+        switch self {
+        case .notFound(let path): "No Parseley history at \(path). Run the app first, or pass --db <path>."
+        case .needsUpgrade: "The history database is from an older Parseley. Open the app once to upgrade it."
+        }
     }
 }
 

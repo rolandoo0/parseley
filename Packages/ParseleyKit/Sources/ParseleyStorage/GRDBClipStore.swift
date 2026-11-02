@@ -23,13 +23,13 @@ public final class GRDBClipStore: ClipStore, @unchecked Sendable {
 
     /// Uses a shared database (the app opens one file for clips and series).
     public convenience init(database: ParseleyDatabase, now: @escaping @Sendable () -> Date = { Date() }) throws {
-        try self.init(dbQueue: database.dbQueue, now: now)
+        try self.init(dbQueue: database.dbQueue, now: now, migrate: !database.isReadOnly)
     }
 
-    init(dbQueue: DatabaseQueue, now: @escaping @Sendable () -> Date) throws {
+    init(dbQueue: DatabaseQueue, now: @escaping @Sendable () -> Date, migrate: Bool = true) throws {
         self.dbQueue = dbQueue
         self.now = now
-        try Schema.migrator.migrate(dbQueue)
+        if migrate { try Schema.migrator.migrate(dbQueue) }
     }
 
     /// Default location: ~/Library/Application Support/Parseley/parseley.sqlite
@@ -265,6 +265,32 @@ enum Schema {
                                      digest.numbers.count, digest.sum?.description, id])
                 try GRDBClipStore.insertNumbers(digest.numbers, clipID: id, in: db)
             }
+        }
+        migrator.registerMigration("v4-sql-views") { db in
+            // Friendly read-only views for SQL from the CLI / MCP server. Exact decimals are
+            // kept as text (*_exact); the REAL columns are for SUM/AVG/ORDER BY.
+            try db.execute(sql: """
+                CREATE VIEW clips AS
+                  SELECT id, content, kind, sourceBundleID AS app, createdAt AS created_at,
+                         lastUsedAt AS last_used_at, isPinned AS pinned, note,
+                         numberCount AS number_count, CAST(numberSum AS REAL) AS number_sum,
+                         numberSum AS number_sum_exact
+                  FROM clip;
+                CREATE VIEW numbers AS
+                  SELECT n.clipId AS clip_id, n.position, CAST(n.value AS REAL) AS value,
+                         n.value AS value_exact, c.sourceBundleID AS app, c.createdAt AS created_at
+                  FROM clipNumber n JOIN clip c ON c.id = n.clipId;
+                CREATE VIEW series_list AS
+                  SELECT id, name, createdAt AS created_at, endedAt AS ended_at FROM series;
+                CREATE VIEW series_values AS
+                  SELECT e.seriesId AS series_id, s.name AS series_name, e.id AS entry_id,
+                         e.sourceBundleID AS app, e.createdAt AS created_at,
+                         CAST(j.value AS REAL) AS value, j.value AS value_exact
+                  FROM seriesEntry e
+                  JOIN series s ON s.id = e.seriesId,
+                       json_each(e.valuesJSON) j
+                  WHERE e.isIncluded = 1;
+                """)
         }
         return migrator
     }

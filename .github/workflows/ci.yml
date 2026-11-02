@@ -39,6 +39,20 @@ jobs:
         working-directory: Packages/ParseleyKit
         run: swift test 2>&1 | tail -n 60; exit ${PIPESTATUS[0]}
 
+      - name: Build CLI (release)
+        working-directory: Packages/ParseleyKit
+        run: |
+          swift build -c release --product parseley
+          .build/release/parseley transforms > /dev/null
+          printf '1\n2\n3\n' | .build/release/parseley sum
+
+      - name: Upload CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: parseley-cli-macos
+          path: Packages/ParseleyKit/.build/release/parseley
+          if-no-files-found: error
+
       - name: Install XcodeGen
         run: brew install xcodegen
 

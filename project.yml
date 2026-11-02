@@ -33,6 +33,7 @@ targets:
         excludes:
           - "Resources/Info.plist"
           - "Resources/AppIcon.svg"   # source artwork; the asset catalog holds the PNGs
+          - "Resources/MenuBarIcon.svg"
     dependencies:
       - package: ParseleyKit
         products:

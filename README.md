@@ -21,7 +21,7 @@ open Parseley.xcodeproj
 ```
 
 In Xcode, pick the **Parseley** scheme and press ⌘R. There's no window and no Dock
-icon. Look for the clipboard icon in the menu bar.
+icon. Look for the clipboard-with-a-sprout icon in the menu bar.
 
 Run `xcodegen` again whenever you add or remove files under `App/` or edit `project.yml`.
 

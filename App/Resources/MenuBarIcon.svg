@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100" height="100" viewBox="0 0 100 100">
+  <!-- Menu-bar glyph (template image: macOS recolors it black or white): the clipboard
+       with a seedling, simplified from the app icon so it reads at 16-18 px.
+       Source artwork; the PNGs in Assets.xcassets/MenuBarIcon.imageset are rendered
+       from this file (see scripts/render-icons.js). -->
+  <defs>
+    <path id="leaf" d="M0 0 C-8 -6 -12 -14 -11 -22 C-10 -28 -5 -32 0 -34 C5 -32 10 -28 11 -22 C12 -14 8 -6 0 0 Z"/>
+  </defs>
+  <rect x="18" y="44" width="64" height="50" rx="10" fill="none" stroke="#000" stroke-width="8"/>
+  <path d="M50 44 V22" stroke="#000" stroke-width="7" stroke-linecap="round"/>
+  <use xlink:href="#leaf" href="#leaf" transform="translate(48 30) rotate(-62)" fill="#000"/>
+  <use xlink:href="#leaf" href="#leaf" transform="translate(52 24) rotate(58) scale(0.85)" fill="#000"/>
+  <line x1="32" y1="62" x2="58" y2="62" stroke="#000" stroke-width="8" stroke-linecap="round"/>
+  <line x1="32" y1="78" x2="68" y2="78" stroke="#000" stroke-width="8" stroke-linecap="round"/>
+</svg>

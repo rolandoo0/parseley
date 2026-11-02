@@ -361,7 +361,7 @@ struct ClipRow: View {
                     if let summary {
                         Text(verbatim: summary)
                             .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Theme.cyan.opacity(0.9))
+                            .foregroundStyle(Theme.cyan)
                             .lineLimit(1)
                     }
                     Text(verbatim: metadata)
@@ -457,17 +457,19 @@ struct StatTile: View {
                     Text(verbatim: item.label.uppercased())
                         .font(.system(size: 8.5, weight: .semibold, design: .rounded))
                         .tracking(1.1)
-                        .foregroundStyle(Theme.textTertiary)
+                        // The main stat is marked by a cyan label and border, not by
+                        // coloring the number (gradients make digits hard to read).
+                        .foregroundStyle(emphasized ? Theme.cyan : Theme.textTertiary)
                     if let shortcut {
                         Spacer(minLength: 0)
                         Text(verbatim: shortcut)
                             .font(.system(size: 8, weight: .medium, design: .rounded))
-                            .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                            .foregroundStyle(Theme.textTertiary)
                     }
                 }
                 Text(verbatim: item.display)
                     .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(emphasized ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.textPrimary))
+                    .foregroundStyle(emphasized ? Theme.numberEmphasis : Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)   // shrink long numbers instead of truncating
             }

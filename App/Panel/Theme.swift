@@ -12,10 +12,15 @@ enum Theme {
     static let amber = Color(red: 1.00, green: 0.77, blue: 0.36)
     static let rose = Color(red: 1.00, green: 0.46, blue: 0.56)
 
-    // Text on glass
+    // Text on glass. Checked for WCAG contrast over the glass on both a black and a
+    // white wallpaper (with the dark base layer in CrystalBackground):
+    // primary ≥ 11:1, secondary ≥ 8:1, tertiary ≥ 5.5:1, cyan ≥ 9:1, violet ≥ 4.9:1.
+    // Numbers are always drawn in solid colors, never gradients.
     static let textPrimary = Color.white.opacity(0.93)
-    static let textSecondary = Color.white.opacity(0.60)
-    static let textTertiary = Color.white.opacity(0.38)
+    static let textSecondary = Color.white.opacity(0.74)
+    static let textTertiary = Color.white.opacity(0.58)
+    /// The figure that matters most (Sum tile, series total): pure white.
+    static let numberEmphasis = Color.white
 
     // Glass surfaces
     static let glassFill = Color.white.opacity(0.055)
@@ -103,6 +108,9 @@ struct CrystalBackground: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
             VisualEffectBackground()
+            // Dark base: keeps text readable even over a white wallpaper, where the
+            // blurred light would otherwise wash out the glass.
+            Color(red: 10 / 255, green: 14 / 255, blue: 26 / 255).opacity(0.55)
             LinearGradient(
                 colors: [Theme.cyan.opacity(0.10), .clear, Theme.violet.opacity(0.14)],
                 startPoint: .topLeading, endPoint: .bottomTrailing

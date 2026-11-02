@@ -48,11 +48,13 @@ struct SeriesBarView: View {
                 Button {
                     series.copySum()
                 } label: {
-                    Text(verbatim: "Σ " + (series.sumItem?.display ?? "0"))
-                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Theme.accentGradient)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                    HStack(spacing: 5) {
+                        Text(verbatim: "Σ").foregroundStyle(Theme.cyan)
+                        Text(verbatim: series.sumItem?.display ?? "0").foregroundStyle(Theme.numberEmphasis)
+                    }
+                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 }
                 .buttonStyle(.plain)
                 .help("Copy the total")

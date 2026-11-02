@@ -320,10 +320,10 @@ private struct StepPane: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(label.uppercased())
                             .font(.system(size: 8.5, weight: .semibold, design: .rounded)).tracking(1.1)
-                            .foregroundStyle(Theme.textTertiary)
+                            .foregroundStyle(label == "Sum" ? Theme.cyan : Theme.textTertiary)
                         Text(label == "Sum" ? "1,492.5" : (label == "Count" ? "3" : "497.5"))
                             .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(label == "Sum" ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.textPrimary))
+                            .foregroundStyle(label == "Sum" ? Theme.numberEmphasis : Theme.textPrimary)
                     }
                     .padding(.horizontal, 10).padding(.vertical, 7)
                     .frame(width: 96, alignment: .leading)
@@ -345,9 +345,11 @@ private struct StepPane: View {
                 if let series, series.isActive {
                     HStack(spacing: 10) {
                         PulseDot(color: Theme.cyan)
-                        Text(verbatim: "Σ \(series.sumItem?.display ?? "0")")
-                            .font(.system(size: 22, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Theme.accentGradient)
+                        HStack(spacing: 6) {
+                            Text(verbatim: "Σ").foregroundStyle(Theme.cyan)
+                            Text(verbatim: series.sumItem?.display ?? "0").foregroundStyle(Theme.numberEmphasis)
+                        }
+                        .font(.system(size: 22, weight: .semibold, design: .monospaced))
                         Text(verbatim: "\(series.stats?.count ?? 0) values")
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(Theme.textTertiary)

@@ -3,6 +3,11 @@
 #if canImport(AppKit)
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox   // IsSecureEventInputEnabled, kVK_ANSI_V
+import os
+
+/// Log messages show up in Xcode's console and in Console.app (filter: "parseley").
+let pasteLog = Logger(subsystem: "parseley", category: "paste")
 
 /// The Accessibility permission ("Privacy & Security → Accessibility").
 ///
@@ -41,45 +46,80 @@ public final class PasteService {
         case needsAccessibility
     }
 
-    /// Virtual key code of the "V" key on an ANSI (US) keyboard.
-    ///
-    /// Key codes are physical positions, not letters. On layouts where that key isn't
-    /// V (e.g. plain Dvorak), apps still usually map ⌘ shortcuts by QWERTY position, so
-    /// this works in practice. Revisit if users report otherwise.
-    private static let vKeyCode: CGKeyCode = 9
+    /// Time for our panel to finish closing and for keyboard focus to return to the
+    /// target window before we "press" ⌘V. Too short and the keystroke can be lost.
+    private static let focusDelay: TimeInterval = 0.15
+    /// Extra time allowed for the target app to become active, if it wasn't already.
+    private static let activationTimeout: TimeInterval = 0.6
 
     public init() {}
 
-    /// - Parameters:
-    ///   - target: The app to paste into. If it isn't frontmost anymore, it's activated first.
-    ///   - delay: Time to let focus return to the target window before posting. Our
-    ///     panel has to finish closing first, or the keystroke would go to the panel.
+    /// - Parameter target: The app to paste into (the one that was frontmost when the
+    ///   panel opened). If it isn't active anymore, it's activated first.
     @discardableResult
-    public func paste(into target: NSRunningApplication?, delay: TimeInterval = 0.05) -> Outcome {
-        guard AccessibilityPermission.isTrusted else { return .needsAccessibility }
+    public func paste(into target: NSRunningApplication?) -> Outcome {
+        guard AccessibilityPermission.isTrusted else {
+            pasteLog.notice("Not pasting: Accessibility permission not granted")
+            return .needsAccessibility
+        }
 
-        var wait = delay
+        let name = target?.localizedName ?? "nil"
+        pasteLog.notice("Paste requested → target: \(name, privacy: .public), active: \(target?.isActive ?? false)")
+
         if let target, !target.isActive, !target.isTerminated {
             target.activate()
-            wait += 0.1   // activating another app takes a moment
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
-            Self.postCommandV()
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusDelay) {
+            Self.postWhenActive(target, deadline: Date().addingTimeInterval(Self.activationTimeout))
         }
         return .posted
     }
 
+    /// Waits (briefly) until the target app is frontmost, then posts ⌘V.
+    private static func postWhenActive(_ target: NSRunningApplication?, deadline: Date) {
+        if let target, !target.isActive, Date() < deadline {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                postWhenActive(target, deadline: deadline)
+            }
+            return
+        }
+        let frontmost = NSWorkspace.shared.frontmostApplication?.localizedName ?? "nil"
+        if IsSecureEventInputEnabled() {
+            // Some app has "secure input" on (a focused password field, or Terminal's
+            // "Secure Keyboard Entry"). macOS then blocks synthetic keystrokes.
+            pasteLog.error("Secure Event Input is ON: macOS will block the simulated ⌘V. Frontmost: \(frontmost, privacy: .public)")
+        }
+        pasteLog.notice("Posting ⌘V. Frontmost app: \(frontmost, privacy: .public)")
+        postCommandV()
+    }
+
     private static func postCommandV() {
+        let vKey = CGKeyCode(kVK_ANSI_V)
+        // Device-independent ⌘ flag plus the "left ⌘ key" device bit (0x08). Some apps
+        // (notably Electron-based ones like Slack/VS Code) ignore ⌘ without the device bit.
+        let commandFlags = CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x08)
+
         let source = CGEventSource(stateID: .combinedSessionState)
-        let down = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true)
-        let up = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false)
+        // While our synthetic keys are delivered, ignore keys the user is physically
+        // still holding (e.g. ↩ from selecting the clip), so they don't mix in.
+        source?.setLocalEventsFilterDuringSuppressionState(
+            [.permitLocalMouseEvents, .permitSystemDefinedEvents],
+            state: .eventSuppressionStateSuppressionInterval
+        )
+
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
+        else {
+            pasteLog.error("Couldn't create keyboard events")
+            return
+        }
         // Set flags explicitly to exactly ⌘, so modifiers the user may still be holding
         // (e.g. ⇧ from the ⌘⇧V hotkey) don't turn this into ⌘⇧V.
-        down?.flags = .maskCommand
-        up?.flags = .maskCommand
-        // .cghidEventTap = inject as if it came from the hardware keyboard.
-        down?.post(tap: .cghidEventTap)
-        up?.post(tap: .cghidEventTap)
+        down.flags = commandFlags
+        up.flags = commandFlags
+        // Session tap = deliver to the frontmost app as if typed by the user.
+        down.post(tap: .cgSessionEventTap)
+        up.post(tap: .cgSessionEventTap)
     }
 }
 #endif

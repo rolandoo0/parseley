@@ -6,6 +6,8 @@
 //   ParseleyStorage  ──► ParseleyCore ◄── ParseleyCapture
 //   (GRDB/SQLite)        (pure Swift)      (pasteboard polling; AppKit adapters)
 //
+//   ParseleyPaste (standalone): posts ⌘V into the frontmost app; Accessibility checks.
+//
 // ParseleyCore uses Foundation only, so its tests (and Capture's, which use a fake
 // pasteboard) also run on Linux / CI without a Mac.
 import PackageDescription
@@ -17,6 +19,7 @@ let package = Package(
         .library(name: "ParseleyCore", targets: ["ParseleyCore"]),
         .library(name: "ParseleyStorage", targets: ["ParseleyStorage"]),
         .library(name: "ParseleyCapture", targets: ["ParseleyCapture"]),
+        .library(name: "ParseleyPaste", targets: ["ParseleyPaste"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
@@ -28,6 +31,8 @@ let package = Package(
             dependencies: ["ParseleyCore", .product(name: "GRDB", package: "GRDB.swift")]
         ),
         .target(name: "ParseleyCapture", dependencies: ["ParseleyCore"]),
+        // Simulated ⌘V + Accessibility permission. macOS-only (empty on Linux).
+        .target(name: "ParseleyPaste"),
 
         .testTarget(name: "ParseleyCoreTests", dependencies: ["ParseleyCore"]),
         .testTarget(name: "ParseleyStorageTests", dependencies: ["ParseleyStorage"]),

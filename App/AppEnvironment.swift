@@ -1,23 +1,24 @@
 import Foundation
+import KeyboardShortcuts
 import Observation
 import ParseleyCapture
 import ParseleyCore
+import ParseleyPaste
 import ParseleyStorage
 
-/// Composition root: builds the long-lived services once and exposes the state the UI
-/// needs. Views get services from here instead of creating their own.
+/// Composition root: builds the long-lived services once and wires them together.
+/// Views get what they need from here instead of creating their own.
 ///
 /// `@Observable` (macOS 14's Observation framework) makes SwiftUI views that read a
 /// property here re-render automatically when it changes. No `@Published` needed.
 /// `@ObservationIgnored` opts out properties the UI never displays.
 ///
-/// Everything here runs on the main thread (SwiftUI and the capture timer both use it).
+/// `@MainActor`: everything here touches UI or the clipboard and runs on the main thread.
+@MainActor
 @Observable
 final class AppEnvironment {
-    /// Most recent clips, shown in the menu. Refreshed after every clipboard change.
-    private(set) var recentClips: [Clip] = []
     private(set) var totalClipCount = 0
-    /// Human-readable result of the last clipboard change, handy for checking privacy
+    /// Human-readable result of the last clipboard change. Handy for checking privacy
     /// filtering while developing.
     private(set) var lastEventDescription = "Waiting for a copy…"
     /// Non-nil if the database couldn't be opened (history then lives in memory only).
@@ -25,8 +26,8 @@ final class AppEnvironment {
 
     @ObservationIgnored let store: ClipStore
     @ObservationIgnored let monitor: ClipboardMonitor
-
-    static let menuClipCount = 15
+    @ObservationIgnored let panelModel: HistoryPanelModel
+    @ObservationIgnored let panelController: PanelController
 
     init() {
         let store: ClipStore
@@ -37,52 +38,58 @@ final class AppEnvironment {
             store = InMemoryClipStore()
             storageError = "Couldn't open history database: \(error.localizedDescription)"
         }
-        self.store = store
-        self.storageError = storageError
-        self.monitor = ClipboardMonitor(
+        let monitor = ClipboardMonitor(
             pasteboard: SystemPasteboard(),
             frontmostApp: WorkspaceFrontmostApp(),
             store: store
         )
+        let panelModel = HistoryPanelModel(store: store, monitor: monitor)
+
+        self.store = store
+        self.monitor = monitor
+        self.panelModel = panelModel
+        self.panelController = PanelController(model: panelModel)
+        self.storageError = storageError
 
         // `[weak self]` avoids a retain cycle (self → monitor → closure → self).
         monitor.onEvent = { [weak self] event in
-            self?.lastEventDescription = Self.describe(event)
-            self?.reload()
+            guard let self else { return }
+            lastEventDescription = Self.describe(event)
+            refreshCounts()
+            // Keep the panel live if it's open while you copy something.
+            if panelController.isVisible { panelModel.reload() }
         }
         monitor.start()
-        reload()
+        refreshCounts()
+
+        KeyboardShortcuts.onKeyUp(for: .togglePanel) { [weak self] in
+            self?.panelController.toggle()
+        }
     }
 
     // MARK: - Actions
 
-    func reload() {
-        do {
-            recentClips = try store.fetch(matching: nil, limit: Self.menuClipCount)
-            totalClipCount = try store.count()
-        } catch {
-            lastEventDescription = "Error reading history: \(error.localizedDescription)"
-        }
+    func showPanel() {
+        panelController.show()
     }
 
-    /// Puts a history clip back on the clipboard (⌘V it yourself; auto-paste comes in M2).
-    func copy(_ clip: Clip) {
-        guard let id = clip.id else { return }
-        do {
-            try monitor.copyToClipboard(clipID: id)
-            lastEventDescription = "Copied from history"
-        } catch {
-            lastEventDescription = "Copy failed: \(error.localizedDescription)"
-        }
-        reload()
+    var isAccessibilityTrusted: Bool { AccessibilityPermission.isTrusted }
+
+    func enableAutoPaste() {
+        panelModel.enableAutoPaste()
     }
 
     func clearHistory() {
         try? store.deleteAll(keepingPinned: true)
-        reload()
+        refreshCounts()
+        panelModel.reload()
     }
 
     // MARK: - Helpers
+
+    private func refreshCounts() {
+        totalClipCount = (try? store.count()) ?? 0
+    }
 
     private static func describe(_ event: CaptureEvent) -> String {
         switch event {

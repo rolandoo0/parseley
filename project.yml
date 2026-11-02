@@ -20,6 +20,9 @@ settings:
 packages:
   ParseleyKit:
     path: Packages/ParseleyKit
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 2.0.0
 
 targets:
   Parseley:
@@ -35,6 +38,8 @@ targets:
           - ParseleyCore
           - ParseleyStorage
           - ParseleyCapture
+          - ParseleyPaste
+      - package: KeyboardShortcuts
     info:
       path: App/Resources/Info.plist
       properties:
@@ -49,9 +54,12 @@ targets:
         # Accessibility permission and doesn't work well for sandboxed apps.
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
-        # "Sign to Run Locally" (ad-hoc). Fine for M1. In M2, set your team in Xcode
-        # (Signing & Capabilities) or here via DEVELOPMENT_TEAM, otherwise macOS forgets
-        # the Accessibility permission after every rebuild.
+        # Signing. Default: ad-hoc ("Sign to Run Locally"). It runs without an Apple
+        # account, but macOS forgets the Accessibility permission after every rebuild.
+        # For a stable signature (recommended from M2 on), set both lines below:
+        #   DEVELOPMENT_TEAM: "AB12CD34EF"            # your Team ID (a free personal team works)
+        #   CODE_SIGN_IDENTITY: "Apple Development"
+        # Edit here rather than in Xcode's UI: `xcodegen` overwrites UI changes.
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         DEVELOPMENT_TEAM: ""

@@ -52,6 +52,8 @@ final class OnboardingController {
     let guide = TourController()
     /// Set by AppEnvironment: the tour shows the live series total and can start one.
     weak var series: SeriesController?
+    /// Set by AppEnvironment: opens the history panel with the given search text.
+    var openPanel: ((String) -> Void)?
     private var window: NSWindow?
     private static let completedKey = "onboarding.completed"
 
@@ -78,6 +80,7 @@ final class OnboardingController {
             window.title = "Parseley Tour"
             window.contentView = NSHostingView(rootView: GuideView(
                 guide: guide, seriesProvider: { [weak self] in self?.series },
+                openPanel: { [weak self] query in self?.openPanel?(query) },
                 onFinish: { [weak self] in self?.finish() }
             ))
             window.center()
@@ -100,6 +103,7 @@ final class OnboardingController {
 private struct GuideView: View {
     let guide: TourController
     let seriesProvider: () -> SeriesController?
+    let openPanel: (String) -> Void
     let onFinish: () -> Void
 
     @State private var trusted = AccessibilityPermission.isTrusted
@@ -113,7 +117,7 @@ private struct GuideView: View {
             Rectangle().fill(Theme.hairline).frame(width: 1)
             Group {
                 if let step = guide.tour.current {
-                    StepPane(step: step, guide: guide, series: seriesProvider(), trusted: trusted)
+                    StepPane(step: step, guide: guide, series: seriesProvider(), trusted: trusted, openPanel: openPanel)
                         .id(step)
                         .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
                                                 removal: .opacity))
@@ -237,6 +241,7 @@ private struct StepPane: View {
     let guide: TourController
     let series: SeriesController?
     let trusted: Bool
+    let openPanel: (String) -> Void
 
     private var done: Bool { guide.tour.isDone(step) }
 
@@ -281,7 +286,7 @@ private struct StepPane: View {
         case .feedSeries:
             "Now copy a few numbers. Use the buttons below, or copy numbers from anywhere. Watch the total climb."
         case .commandBar:
-            "Open the panel and type > followed by what you want: >sum, >sql, >new series… then press ⏎."
+            "Open the panel with your history shortcut, type > followed by what you want (>sum, >sql, >new series…) and press ⏎."
         case .saveTotal:
             "Press the series shortcut again to stop. The total is saved in your history as a Series total."
         case .autoPaste:
@@ -358,13 +363,22 @@ private struct StepPane: View {
                 }
             }
         case .commandBar:
-            HStack(spacing: 8) {
-                ForEach([">sum", ">sql", ">new series", ">fin"], id: \.self) { example in
-                    Text(verbatim: example)
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundStyle(Theme.cyan)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .glassCard(radius: 8)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 14) {
+                    ShortcutDisplay(name: .togglePanel, fallback: "⌘⇧V")
+                    Text("or").foregroundStyle(Theme.textTertiary)
+                    TourButton(title: "Open it with > typed", icon: "command") { openPanel(">") }
+                }
+                .font(.system(size: 12.5))
+                HStack(spacing: 8) {
+                    Text("Then try:").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                    ForEach([">sum", ">sql", ">new series", ">fin"], id: \.self) { example in
+                        Text(verbatim: example)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(Theme.cyan)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .glassCard(radius: 8)
+                    }
                 }
             }
         case .saveTotal:

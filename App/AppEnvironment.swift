@@ -131,6 +131,11 @@ final class AppEnvironment {
 
         // The interactive welcome tour reacts to what the user actually does.
         onboarding.series = series
+        onboarding.openPanel = { [weak self] query in
+            guard let self else { return }
+            panelController.show()
+            panelModel.query = query   // ">" opens the command bar on the selected clip
+        }
         panelController.onShow = { [weak self] in self?.onboarding.guide.record(.openedPanel) }
         panelModel.onStatCopied = { [weak self] in self?.onboarding.guide.record(.copiedStat) }
         panelModel.onCommandRun = { [weak self] in self?.onboarding.guide.record(.ranCommand) }

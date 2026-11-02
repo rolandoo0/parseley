@@ -81,7 +81,11 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             "${SIGNING[@]}" build > xcodebuild.log 2>&1 || { grep -E "error:" xcodebuild.log; tail -n 40 xcodebuild.log; exit 1; }
           cp -R build/Build/Products/Release/Parseley.app .
-          echo "Architectures: $(lipo -archs Parseley.app/Contents/MacOS/Parseley)"
+          archs="$(lipo -archs Parseley.app/Contents/MacOS/Parseley)"
+          echo "Architectures: $archs"
+          [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || { echo "::error::App is not universal"; exit 1; }
+          v="$(defaults read "$PWD/Parseley.app/Contents/Info" CFBundleShortVersionString)"
+          [ "$v" = "${{ steps.version.outputs.version }}" ] || { echo "::error::Info.plist version is $v"; exit 1; }
           codesign --verify --deep --strict --verbose=1 Parseley.app
 
       - name: Build CLI

@@ -49,6 +49,9 @@ targets:
       path: App/Resources/Info.plist
       properties:
         CFBundleDisplayName: Parseley
+        # Versions come from the build settings (the release workflow sets them from the tag).
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.productivity
         # Menu-bar-only app: no Dock icon, no app menu bar.
         LSUIElement: true

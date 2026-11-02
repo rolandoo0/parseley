@@ -36,8 +36,12 @@ jobs:
       - name: Version
         id: version
         run: |
-          v="${GITHUB_REF_NAME#v}"
-          [[ "$v" =~ ^[0-9] ]] || v="0.0.0-dev"
+          # Tags like v0.2.0 give 0.2.0; anything else (PRs, manual runs) is a dev build.
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [[ "$GITHUB_REF_NAME" =~ ^v[0-9][0-9A-Za-z.-]*$ ]]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            v="0.0.0-dev.${{ github.run_number }}"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
       - name: Import signing certificate

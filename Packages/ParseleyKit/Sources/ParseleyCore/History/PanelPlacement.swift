@@ -1,4 +1,8 @@
 import Foundation
+// CGRect/CGSize/CGPoint live in CoreGraphics on macOS (Foundation provides them on Linux).
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// Where to put the history panel so it opens near the mouse but stays fully on screen.
 ///

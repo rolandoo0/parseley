@@ -159,11 +159,11 @@ final class AppEnvironment {
             if self.pasteQueue.isActive {
                 self.pasteQueue.pasteNext()
             } else {
-                self.pasteSeriesResult(emptyMessage: "Nothing to paste · count a series or queue some clips")
+                self.pasteSeriesResult(emptyMessage: "Nothing to add up · copy some numbers or start a series")
             }
         }
         KeyboardShortcuts.onKeyUp(for: .pasteSeriesResult) { [weak self] in
-            self?.pasteSeriesResult(emptyMessage: "No series to paste · start one with ⌃⌥⌘T")
+            self?.pasteSeriesResult(emptyMessage: "Nothing to add up · copy some numbers or start a series")
         }
         KeyboardShortcuts.onKeyUp(for: .copySeriesTotal) { [weak self] in
             self?.series.copyCurrentOrLastTotal()
@@ -174,14 +174,35 @@ final class AppEnvironment {
 
     /// Pastes the running (or last) series' result: the stat chosen in Settings › Series,
     /// or the current mode's main stat.
+    ///
+    /// What gets summed, first match wins:
+    /// 1. the running series;
+    /// 2. a list of numbers on the clipboard (copy a column, press the hotkey);
+    /// 3. the last finished series.
     func pasteSeriesResult(emptyMessage: String) {
-        let choice = settings.seriesPasteStat
-        let preferred = choice == AppSettings.followMode ? nil : choice
-        guard let result = series.pasteResult(preferred: preferred) else {
-            return toast.show(emptyMessage, icon: "sum")
+        if let running = series.resultSeries(finished: false), let stats = running.stats {
+            return pasteStat(of: stats, describing: "series")
         }
-        let label = "\(result.item.label.lowercased()) \(result.item.display)"
-        pasteQueue.pasteOnce(result.item.copyText, label: label)
+        if let text = monitor.currentText, text.utf16.count <= HistoryPanelModel.maxStatsLength,
+           let stats = NumberStats(text: text, parser: NumberParser(format: modes.current.numberFormat)),
+           stats.count >= 2 {
+            return pasteStat(of: stats, describing: "\(stats.count) copied numbers")
+        }
+        if let last = series.resultSeries(finished: true), let stats = last.stats {
+            return pasteStat(of: stats, describing: last.name)
+        }
+        toast.show(emptyMessage, icon: "sum")
+    }
+
+    /// Pastes the stat chosen in Settings › Series (or the mode's main stat; the sum
+    /// if that isn't available) of `stats`.
+    private func pasteStat(of stats: NumberStats, describing source: String) {
+        let choice = settings.seriesPasteStat
+        let label = choice == AppSettings.followMode ? modes.current.primaryStat : choice
+        let items = stats.items(format: modes.current.numberFormat)
+        guard let item = items.first(where: { $0.label == label }) ?? items.first(where: { $0.label == "Sum" })
+        else { return }
+        pasteQueue.pasteOnce(item.copyText, label: "\(item.label.lowercased()) of \(source): \(item.display)")
     }
 
     func showPanel() {

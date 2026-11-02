@@ -43,8 +43,8 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | ⌃⌥⌘T (anywhere) | Start / stop a series |
 | ⌃⌥⌘N (anywhere) | New series |
 | ⌃⌥⌘C (anywhere) | Copy the series total (or the last series' total) |
-| ⌃⌥⌘V (anywhere) | Paste the next item of the paste queue; with no queue, paste the series result |
-| ⌃⌥⌘= (anywhere) | Paste the series result (sum, or the stat set in Settings › Series) |
+| ⌃⌥⌘V (anywhere) | Paste the next item of the paste queue; with no queue, paste a total (below) |
+| ⌃⌥⌘= (anywhere) | Paste a total: the running series' sum, else the sum of the numbers you just copied, else the last series' (the stat is set in Settings › Series) |
 
 Right-click a row for the same actions.
 
@@ -127,8 +127,10 @@ Pasting it pastes the number. Series totals are never removed by the history lim
 
 ### Command bar
 
-Type `>` in the panel's search field: `>sql`, `>cs` (copy sum), `>new` (new series),
-`>fin` (mode: Finance)… ↑/↓ and ⏎ run a command on the clip(s) that were selected.
+Type `>` in the panel's search field. The numbers of the selected clip(s) come first:
+`>sum` shows the sum; ⏎ pastes it into the app you were in, ⌘⏎ copies it. Other
+commands: `>sql`, `>sort`, `>new` (new series), `>fin` (mode: Finance)… ↑/↓ and ⏎ run a
+command on the clip(s) that were selected when you typed `>`.
 
 ### Settings (menu bar → Settings…)
 

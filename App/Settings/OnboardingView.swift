@@ -150,8 +150,7 @@ private struct StepList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 12) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable().frame(width: 40, height: 40)
+                ParseleyLogo(size: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Parseley tour")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -286,7 +285,7 @@ private struct StepPane: View {
         case .feedSeries:
             "Now copy a few numbers. Use the buttons below, or copy numbers from anywhere. Watch the total climb."
         case .commandBar:
-            "Open the panel with your history shortcut, type > followed by what you want (>sum, >sql, >new series…) and press ⏎."
+            "Open the panel with your history shortcut, type > followed by what you want and press ⏎. Try >sum: ⏎ pastes the sum of the selected clip into the app you were in, ⌘⏎ copies it. Others: >sql, >sort, >new series."
         case .saveTotal:
             "Press the series shortcut again to stop. The total is saved in your history as a Series total."
         case .autoPaste:
@@ -485,10 +484,7 @@ private struct FinishPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 34))
-                .foregroundStyle(Theme.accentGradient)
-                .shadow(color: Theme.cyan.opacity(0.6), radius: 12)
+            ParseleyLogo(size: 72)
             Text("You're all set")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.textPrimary)
@@ -499,6 +495,7 @@ private struct FinishPane: View {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 card("square.stack.3d.up", "Modes", "Adapts to the app you're in: Finance in Excel, SQL in your database tool.")
                 card("wand.and.stars", "Recipes", "Save chains of transforms in Settings → Recipes.")
+                card("sum", "Paste a total", "Copy a column (or run a series), then ⌃⌥⌘V pastes its sum right where you are.")
                 card("list.number", "Paste queue", "⌘-click clips → Queue, then ⌃⌥⌘V pastes them one by one.")
                 card("terminal", "Terminal & Claude", "`parseley sum`, `parseley sql`, and an MCP server for Claude.")
             }

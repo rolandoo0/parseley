@@ -123,19 +123,12 @@ final class SeriesController {
         }
     }
 
-    /// The result the "paste series result" hotkey pastes: from the running series, or
-    /// the last finished one when none is running. `preferred` is a stat label ("Sum",
-    /// "Average"…); nil means the current mode's main stat. Falls back to the sum.
-    func pasteResult(preferred: String?) -> (item: NumberStats.Item, series: Series)? {
-        let series: Series? = isActive
-            ? active
-            : recent.first { $0.endedAt != nil && !$0.values.isEmpty }
-        guard let series, let stats = series.stats else { return nil }
-        let label = preferred ?? modes?.current.primaryStat ?? "Sum"
-        let items = stats.items(format: format)
-        guard let item = items.first(where: { $0.label == label }) ?? items.first(where: { $0.label == "Sum" })
-        else { return nil }
-        return (item, series)
+    /// The series whose result the paste hotkeys use: the running one (if it has
+    /// numbers), or with `finished` the last finished one.
+    func resultSeries(finished: Bool) -> Series? {
+        finished
+            ? recent.first { $0.endedAt != nil && !$0.values.isEmpty }
+            : active.flatMap { $0.values.isEmpty ? nil : $0 }
     }
 
     /// All counted values as a column, ready to paste into a spreadsheet.

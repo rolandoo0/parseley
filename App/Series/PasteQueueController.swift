@@ -43,16 +43,18 @@ final class PasteQueueController {
         queue = current
         monitor.writeWithoutRecording(item.content)
 
-        if pasteService.paste(into: NSWorkspace.shared.frontmostApplication) == .needsAccessibility {
+        let finished = current.isFinished
+        let outcome = pasteService.paste(into: NSWorkspace.shared.frontmostApplication) { [weak self] in
+            // Give the app a moment to read the clipboard, then restore what was there.
+            guard finished else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self?.finish(announce: false) }
+        }
+        if outcome == .needsAccessibility {
             toast.show("Item \(current.progress) on the clipboard · press ⌘V (enable Auto-Paste to skip this)", icon: "doc.on.clipboard")
         } else if let next = current.next {
             toast.show("Pasted \(current.progress) · next: \(next.preview)", icon: "list.number")
         } else {
             toast.show("Pasted \(current.progress) · queue done", icon: "checkmark.circle.fill")
-        }
-        if current.isFinished {
-            // Give the paste time to read the clipboard before restoring it.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.finish(announce: false) }
         }
     }
 
@@ -62,16 +64,18 @@ final class PasteQueueController {
     func pasteOnce(_ text: String, label: String) {
         let previous = monitor.currentText
         monitor.writeWithoutRecording(text)
-        if pasteService.paste(into: NSWorkspace.shared.frontmostApplication) == .needsAccessibility {
+        let outcome = pasteService.paste(into: NSWorkspace.shared.frontmostApplication) { [weak self] in
+            // Give the app a moment to read the clipboard, then restore what was there.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                guard let self, let previous, self.queue == nil else { return }
+                self.monitor.writeWithoutRecording(previous)
+            }
+        }
+        if outcome == .needsAccessibility {
             // Leave it on the clipboard so a manual ⌘V works.
             return toast.show("\(label) on the clipboard · press ⌘V (enable Auto-Paste to skip this)", icon: "doc.on.clipboard")
         }
         toast.show("Pasted \(label)", icon: "sum")
-        // Give the paste time to read the clipboard before restoring it.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            guard let self, let previous, self.queue == nil else { return }
-            self.monitor.writeWithoutRecording(previous)
-        }
     }
 
     func cancel() {

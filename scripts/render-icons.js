@@ -12,6 +12,9 @@ const jobs = [
   ...[16, 32, 64, 128, 256, 512, 1024].map((size) => ({
     svg: 'App/Resources/AppIcon.svg', size, out: `AppIcon.appiconset/icon_${size}.png`,
   })),
+  // The logo shown inside the app (welcome guide, panel, settings).
+  { svg: 'App/Resources/AppIcon.svg', size: 256, out: 'AppLogo.imageset/logo_256.png' },
+  { svg: 'App/Resources/AppIcon.svg', size: 512, out: 'AppLogo.imageset/logo_512.png' },
   // Menu-bar glyph: 18 pt tall, 1x and 2x.
   { svg: 'App/Resources/MenuBarIcon.svg', size: 18, out: 'MenuBarIcon.imageset/menubar_18.png' },
   { svg: 'App/Resources/MenuBarIcon.svg', size: 36, out: 'MenuBarIcon.imageset/menubar_36.png' },

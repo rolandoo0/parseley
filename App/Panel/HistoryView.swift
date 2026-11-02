@@ -51,9 +51,7 @@ struct HistoryView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "sparkle.magnifyingglass")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Theme.accentGradient)
+            ParseleyLogo(size: 30)
             TextField(
                 "", text: $model.query,
                 prompt: Text("Search your clipboard").foregroundStyle(Theme.textTertiary)
@@ -156,10 +154,14 @@ struct HistoryView: View {
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            Image(systemName: model.query.isEmpty ? "sparkles" : "magnifyingglass")
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(Theme.accentGradient)
-                .shadow(color: Theme.cyan.opacity(0.5), radius: 12)
+            if model.query.isEmpty {
+                ParseleyLogo(size: 64)
+            } else {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 30, weight: .light))
+                    .foregroundStyle(Theme.accentGradient)
+                    .shadow(color: Theme.cyan.opacity(0.5), radius: 12)
+            }
             Text(model.query.isEmpty ? "Copy something to get started" : "No matches")
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(Theme.textSecondary)
@@ -295,6 +297,10 @@ struct HistoryView: View {
                 .foregroundStyle(Theme.mint)
                 .shadow(color: Theme.mint.opacity(0.6), radius: 6)
                 .transition(.opacity)
+            } else if model.isCommandMode {
+                hint("↑↓", "Choose")
+                hint("⏎", "Run / paste number")
+                hint("⌘⏎", "Copy number")
             } else {
                 hint("⏎", "Paste")
                 hint("⌘⏎", "Copy")
@@ -576,10 +582,27 @@ struct CommandRow: View {
                 .font(.system(size: 13.5, weight: .medium))
                 .foregroundStyle(Theme.textPrimary)
             Spacer()
-            Text(verbatim: command.detail)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Theme.textTertiary)
-                .lineLimit(1)
+            if command.isValue {
+                // A number: show it big, and what ⏎ / ⌘⏎ do with it.
+                if isSelected {
+                    HStack(spacing: 4) {
+                        KeyCap(key: "⏎")
+                        Text("paste").foregroundStyle(Theme.textTertiary)
+                        KeyCap(key: "⌘⏎")
+                        Text("copy").foregroundStyle(Theme.textTertiary)
+                    }
+                    .font(.system(size: 10.5, design: .rounded))
+                }
+                Text(verbatim: command.detail)
+                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Theme.numberEmphasis)
+                    .lineLimit(1)
+            } else {
+                Text(verbatim: command.detail)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

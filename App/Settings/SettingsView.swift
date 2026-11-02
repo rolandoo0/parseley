@@ -43,6 +43,18 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Section {
+                HStack(spacing: 14) {
+                    ParseleyLogo(size: 48)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Parseley").font(.title3.weight(.semibold))
+                        Text(verbatim: "Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev") · everything stays on this Mac")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Section {
                 // Recorder: click it, press a new key combination, done. Saved automatically.
                 KeyboardShortcuts.Recorder("Open clipboard panel:", name: .togglePanel)
             }
@@ -187,7 +199,7 @@ private struct SeriesSettings: View {
                         Text(choice == AppSettings.followMode ? "Mode's main stat" : choice).tag(choice)
                     }
                 }
-                Text("⌃⌥⌘V pastes the running series' result when no paste queue is running (the queue goes first). ⌃⌥⌘= always pastes the result. With no series running, the last finished series is used. Your clipboard is left as it was.")
+                Text("⌃⌥⌘V (when no paste queue is running) and ⌃⌥⌘= paste a result straight into the app you're in: the running series first; otherwise the numbers you just copied (copy a column, press the shortcut); otherwise the last finished series. Your clipboard is left as it was.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

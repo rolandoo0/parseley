@@ -13,6 +13,10 @@ struct PanelCommand: Identifiable {
     let icon: String
     /// Extra words it should be found by ("sum total" for "Copy series total").
     var keywords: String = ""
+    /// A number (sum, average…): ⏎ pastes it, ⌘⏎ copies it, shown prominently.
+    var isValue = false
+    /// What ⌘⏎ does instead of `run` (nil = same as ⏎).
+    var copy: (() -> Void)? = nil
     let run: () -> Void
 
     /// What the command bar matches against: the title first, then the keywords.
@@ -171,7 +175,10 @@ final class HistoryPanelModel {
 
     /// Commands matching what's typed after ">", best first.
     var commands: [PanelCommand] {
-        FuzzyMatch.rank(allCommands, query: String(query.dropFirst()), key: \.searchText)
+        // Numbers first, so ">" alone shows the answers at the top.
+        let all = allCommands
+        let ordered = all.filter(\.isValue) + all.filter { !$0.isValue }
+        return FuzzyMatch.rank(ordered, query: String(query.dropFirst()), key: \.searchText)
     }
 
     /// What the commands will act on, for the header ("3 clips", "“$1,204.50…”").
@@ -293,7 +300,7 @@ final class HistoryPanelModel {
     /// that was frontmost before the panel opened. In the command bar: run the command.
     func activate(_ row: ClipSummary? = nil, mode activation: ActivationMode = .paste) {
         if row == nil, isCommandMode {
-            runCommand(at: commandIndex)
+            runCommand(at: commandIndex, copyOnly: activation == .copyOnly)
             return
         }
         guard let id = row?.id ?? selection.selectedID else { return }
@@ -318,13 +325,27 @@ final class HistoryPanelModel {
         }
     }
 
-    func runCommand(at index: Int) {
+    /// ⏎ runs the command (for a number: pastes it); ⌘⏎ copies a number instead.
+    func runCommand(at index: Int, copyOnly: Bool = false) {
         let list = commands
         guard list.indices.contains(index) else { return }
         let command = list[index]
         query = ""            // leave the command bar first…
-        command.run()         // …so the command's own selection/toast stick
+        if copyOnly, let copy = command.copy { copy() } else { command.run() }   // …so its toast sticks
         onCommandRun?()
+    }
+
+    /// Command bar ⏎ on a number: close the panel and paste it into the app you were in.
+    /// The value is not added to history (or counted in a running series).
+    func pasteValue(_ item: NumberStats.Item) {
+        monitor.writeWithoutRecording(item.copyText)
+        let target = pasteTarget()
+        closePanel()
+        if pasteService.paste(into: target) == .needsAccessibility, !hasPromptedForAccessibility {
+            // It's on the clipboard; ⌘V works. Explain the permission once per launch.
+            hasPromptedForAccessibility = true
+            AccessibilityPermission.requestWithSystemPrompt()
+        }
     }
 
     /// Click on a stat tile: copy its value (it also lands in history). The panel stays
@@ -435,30 +456,34 @@ final class HistoryPanelModel {
         }
 
         // Stats of the targets: as soon as there's one number (the sum of "30" is 30).
-        if mode.showsNumbers, let stats = combinedStats(of: targets) {
-            let keywords = ["Sum": "total add", "Average": "mean avg", "Count": "how many number",
+        // Shown in every mode: typing >sum is an explicit ask.
+        if let stats = combinedStats(of: targets) {
+            let keywords = ["Sum": "total add Σ", "Average": "mean avg", "Count": "how many number",
                             "Median": "middle", "Min": "minimum lowest smallest", "Max": "maximum highest largest"]
             // With a single number only "sum" means anything (count 1, min = max = it).
             let items = stats.items(format: format, primary: mode.primaryStat)
                 .filter { stats.count >= 2 || $0.label == "Sum" }
             for item in items {
                 list.append(PanelCommand(
-                    id: "stat.\(item.label)", title: "Copy \(item.label.lowercased())", detail: item.display,
-                    icon: "number", keywords: keywords[item.label] ?? ""
-                ) { [weak self] in self?.copyStat(item) })
+                    id: "stat.\(item.label)", title: item.label, detail: item.display,
+                    icon: item.label == "Sum" ? "sum" : "number",
+                    keywords: "\(keywords[item.label] ?? "") paste copy", isValue: true,
+                    copy: { [weak self] in self?.copyStat(item) }
+                ) { [weak self] in self?.pasteValue(item) })
             }
         }
 
         // Columns of a copied spreadsheet range.
-        if mode.showsNumbers, targets.count == 1, let target = targets.first,
+        if targets.count == 1, let target = targets.first,
            target.content.contains("\t"), target.content.utf16.count <= Self.maxStatsLength,
            let table = TableParser.parse(target.content, format: format) {
             for column in table.numericColumns {
                 guard let sum = column.stats?.items(format: format).first(where: { $0.label == "Sum" }) else { continue }
                 list.append(PanelCommand(
-                    id: "column.\(column.index)", title: "Copy sum of \(column.name)", detail: sum.display, icon: "tablecells",
-                    keywords: "total column"
-                ) { [weak self] in self?.copyStat(sum) })
+                    id: "column.\(column.index)", title: "Sum of \(column.name)", detail: sum.display, icon: "tablecells",
+                    keywords: "total column paste copy", isValue: true,
+                    copy: { [weak self] in self?.copyStat(sum) }
+                ) { [weak self] in self?.pasteValue(sum) })
             }
         }
 

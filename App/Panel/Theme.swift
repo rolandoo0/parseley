@@ -157,6 +157,23 @@ extension View {
     }
 }
 
+/// Parseley's logo (the app icon artwork, from the asset catalog). Uses its own image
+/// asset rather than the app's icon, which macOS caches and can show stale.
+struct ParseleyLogo: View {
+    var size: CGFloat = 32
+
+    var body: some View {
+        Image("AppLogo")
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            // The artwork has Apple's icon margin; scale it so the squircle fills `size`.
+            .frame(width: size * 1024 / 824, height: size * 1024 / 824)
+            .frame(width: size, height: size)
+            .accessibilityLabel("Parseley")
+    }
+}
+
 /// A keyboard key drawn as a tiny keycap: ⏎, ⌘P, esc…
 struct KeyCap: View {
     let key: String

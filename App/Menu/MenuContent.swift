@@ -39,6 +39,7 @@ struct MenuContent: View {
 
         Divider()
 
+        Button("Welcome Guide…") { env.onboarding.show() }
         // Opens the SwiftUI `Settings` scene (macOS 14+).
         SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")

@@ -3,9 +3,9 @@
 A macOS menu-bar clipboard manager focused on numbers and data. Fully local: no
 network, no accounts, no analytics.
 
-**Status:** capture, storage, history panel, hotkey, paste, number parser, stats,
-transforms, crystal UI, series (running tally), multi-select, Settings, **modes**,
-**command bar**, stat shortcuts.
+**Status:** v2: history panel, number parsing/stats, transforms, series (running
+tally), modes, command bar, per-column table stats, recipes, paste queue, CLI + MCP
+server, onboarding. CI builds and tests every push on macOS.
 
 ## Requirements
 
@@ -43,6 +43,7 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | ⌃⌥⌘T (anywhere) | Start / stop a series |
 | ⌃⌥⌘N (anywhere) | New series |
 | ⌃⌥⌘C (anywhere) | Copy the series total (or the last series' total) |
+| ⌃⌥⌘V (anywhere) | Paste the next item of the paste queue |
 
 Right-click a row for the same actions.
 
@@ -97,6 +98,32 @@ which transforms come first. The menu-bar icon and the chip in the panel header 
 active mode; click the chip (or menu bar → Mode) to lock a mode by hand, or go back to
 Automatic. Edit, add and remove modes in Settings → Modes.
 
+### Tables
+
+Copy a range from Excel / Numbers / Google Sheets and the panel shows column chips
+(All · Q1 · Q2…, with the header row detected). Pick one to get that column's stats;
+⌘1–⌘6 and the command bar (`>sum of Q1`) follow it.
+
+### Recipes
+
+Saved chains of transforms, e.g. *Clean whitespace → Dedupe → Sort ↑ → SQL IN*. They
+appear after the transform buttons and in the command bar. Edit them in Settings →
+Recipes (with a live preview). A mode can **run a recipe on every copy** (Settings →
+Modes): the result replaces the clipboard, and the original stays in history.
+
+### Paste queue
+
+⌘-click several clips → **Queue** (or `>paste queue`). Then in any app, each ⌃⌥⌘V
+pastes the next one: handy for filling forms or a column of cells. When the queue
+ends, your previous clipboard comes back. Status and Cancel are in the menu bar.
+
+### Series totals in history
+
+When a series ends (Stop, New series, or splitting at a prompt) its total is saved to
+your history as a **Series total** clip: `Σ 4,210.50 · Q3 expenses · 12 values`.
+Pasting it pastes the number. Series totals are never removed by the history limit or
+"Clear All but Pinned".
+
 ### Command bar
 
 Type `>` in the panel's search field: `>sql`, `>cs` (copy sum), `>new` (new series),
@@ -119,6 +146,60 @@ Plain numbers (strips `$` and thousands separators).
 
 Heads-up: while Parseley runs, ⌘⇧V no longer triggers "Paste and Match Style" in other
 apps. A global hotkey wins. Rebind it in Settings → General.
+
+## Command line & AI assistants (MCP)
+
+The `parseley` tool reads your history (read-only) from the terminal:
+
+```sh
+cd Packages/ParseleyKit
+swift build -c release --product parseley
+cp .build/release/parseley /usr/local/bin/      # or anywhere on your PATH
+```
+(CI also uploads a prebuilt `parseley` binary as an artifact on every push.)
+
+```sh
+parseley recent -n 10              # latest clips
+parseley search invoice            # find clips
+pbpaste | parseley stats           # stats of anything piped in
+parseley sum 42                    # sum of clip #42
+pbpaste | parseley transform sql.in
+parseley series                    # running and past series
+parseley sql "SELECT app, ROUND(SUM(value),2) FROM numbers GROUP BY app ORDER BY 2 DESC"
+parseley sql --help                # the SQL views: clips, numbers, series_list, series_values
+```
+
+**MCP server**: lets Claude (or any MCP client) search your history, compute stats,
+run transforms and read-only SQL. It runs only when the client starts it, on your Mac.
+
+- Claude Code: `claude mcp add parseley -- /usr/local/bin/parseley mcp`
+- Claude Desktop: add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+  ```json
+  { "mcpServers": { "parseley": { "command": "/usr/local/bin/parseley", "args": ["mcp"] } } }
+  ```
+
+Tools: `recent_clips`, `search_clips`, `get_clip`, `number_stats`, `transform_text`,
+`list_series`, `query_sql`. Note this gives the assistant access to your clipboard
+history (excluding anything Parseley never stored: password-manager copies and
+excluded apps).
+
+## Releases
+
+Push a tag (`git tag v0.2.0 && git push origin v0.2.0`) and the Release workflow builds
+`Parseley-0.2.0.dmg` and `parseley-cli-0.2.0.zip` into a draft GitHub Release. Without
+signing secrets the app is unsigned (first open: right-click → Open). To ship signed
+and notarized builds, add the secrets listed at the top of
+`.github/workflows/release.yml` (needs a paid Apple Developer account).
+
+## Performance notes
+
+- Lists never load clip text: each clip stores a preview, line count, number count and
+  sum when it's captured (listing 300 large clips: ~59 KB / 9 ms instead of ~30 MB / 1.6 s).
+- Full text is loaded only for the selected clip(s), from a small bounded cache, and
+  everything the panel holds is released when it closes.
+- Numbers are parsed once per copy (in the source app's format) and stored per clip
+  (`clipNumber` table), which also powers SQL.
+- Copies over 200,000 characters are stored as plain text without number scanning.
 
 ## Signing & the Accessibility permission (manual steps)
 
@@ -160,7 +241,8 @@ Or open `Packages/ParseleyKit/Package.swift` in Xcode and press ⌘U.
 ## Layout
 
 ```
-App/                         Thin SwiftUI/AppKit shell: menu bar, floating panel, hotkey
+App/                         SwiftUI/AppKit shell: menu bar, panel, series bar, settings,
+                             onboarding, toast, paste queue, modes/recipes controllers
 Packages/ParseleyKit/
   Sources/ParseleyCore/      Pure Swift: Clip model, ClipStore protocol, TypeDetector,
                              PrivacyPolicy, NumberParser, NumberStats, Transforms
@@ -171,6 +253,8 @@ Packages/ParseleyKit/
                              GRDBSeriesStore, migrations
   Sources/ParseleyCapture/   ClipboardMonitor (polling pipeline) + NSPasteboard adapter
   Sources/ParseleyPaste/     Simulated ⌘V (CGEvent) + Accessibility permission helpers
+  Sources/ParseleyTools/     CLI commands, read-only SQL, MCP server (testable)
+  Sources/ParseleyCLI/       the `parseley` executable
 ```
 
 Data lives at `~/Library/Application Support/Parseley/parseley.sqlite`. You can inspect

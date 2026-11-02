@@ -1,0 +1,124 @@
+# Builds a release when you push a version tag:   git tag v0.2.0 && git push origin v0.2.0
+#
+# Produces Parseley-<version>.dmg (the app) and parseley-cli-<version>.zip, attached to a
+# GitHub Release.
+#
+# Signing & notarization (optional): without these repository secrets the app is built
+# unsigned (macOS will warn on first open: right-click → Open). With them it is signed
+# with your Developer ID and notarized by Apple, so it opens without warnings.
+#   MACOS_CERTIFICATE_P12        base64 of your "Developer ID Application" certificate (.p12)
+#   MACOS_CERTIFICATE_PASSWORD   password of that .p12
+#   DEVELOPMENT_TEAM             your 10-character Team ID
+#   NOTARY_APPLE_ID              Apple ID email used for notarization
+#   NOTARY_PASSWORD              app-specific password for that Apple ID (appleid.apple.com)
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # Dry run (build + package, no release) whenever a PR changes this workflow.
+  pull_request:
+    paths: [".github/workflows/release.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      SIGN: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          [[ "$v" =~ ^[0-9] ]] || v="0.0.0-dev"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Import signing certificate
+        if: env.SIGN == 'true'
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "ci" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "ci" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "ci" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+
+      - name: Build app
+        env:
+          TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          brew install xcodegen
+          xcodegen
+          if [ "$SIGN" = "true" ]; then
+            SIGNING=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" DEVELOPMENT_TEAM="$TEAM"
+                     "OTHER_CODE_SIGN_FLAGS=--timestamp --options runtime")
+          else
+            SIGNING=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="")
+          fi
+          xcodebuild -project Parseley.xcodeproj -scheme Parseley -configuration Release \
+            -destination 'platform=macOS' -derivedDataPath build \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            "${SIGNING[@]}" build > xcodebuild.log 2>&1 || { grep -E "error:" xcodebuild.log; tail -n 40 xcodebuild.log; exit 1; }
+          cp -R build/Build/Products/Release/Parseley.app .
+
+      - name: Build CLI
+        working-directory: Packages/ParseleyKit
+        run: |
+          swift build -c release --product parseley --arch arm64 --arch x86_64
+          cp "$(swift build -c release --product parseley --arch arm64 --arch x86_64 --show-bin-path)/parseley" "$GITHUB_WORKSPACE/parseley"
+          if [ "$SIGN" = "true" ]; then
+            codesign --force --timestamp --options runtime --sign "Developer ID Application" "$GITHUB_WORKSPACE/parseley"
+          fi
+
+      - name: Package
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          mkdir dmg && cp -R Parseley.app dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname "Parseley $V" -srcfolder dmg -ov -format UDZO "Parseley-$V.dmg"
+          if [ "$SIGN" = "true" ]; then codesign --force --timestamp --sign "Developer ID Application" "Parseley-$V.dmg"; fi
+          ditto -c -k parseley "parseley-cli-$V.zip"
+
+      - name: Notarize
+        if: env.SIGN == 'true'
+        env:
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          for f in "Parseley-$V.dmg" "parseley-cli-$V.zip"; do
+            xcrun notarytool submit "$f" --apple-id "$APPLE_ID" --password "$PASSWORD" --team-id "$TEAM" --wait
+          done
+          xcrun stapler staple "Parseley-$V.dmg"
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Parseley-${{ steps.version.outputs.version }}.dmg
+            parseley-cli-${{ steps.version.outputs.version }}.zip
+          generate_release_notes: true
+          draft: true
+
+      - name: Keep build (manual runs)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: parseley-${{ steps.version.outputs.version }}
+          path: |
+            Parseley-*.dmg
+            parseley-cli-*.zip

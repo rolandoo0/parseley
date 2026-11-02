@@ -31,6 +31,7 @@ final class AppEnvironment {
     @ObservationIgnored let recipes: RecipeController
     @ObservationIgnored let toast: ToastController
     @ObservationIgnored let pasteQueue: PasteQueueController
+    @ObservationIgnored let onboarding = OnboardingController()
     @ObservationIgnored let panelModel: HistoryPanelModel
     @ObservationIgnored let panelController: PanelController
     @ObservationIgnored let series: SeriesController
@@ -122,6 +123,9 @@ final class AppEnvironment {
             if panelController.isVisible { panelModel.reload() }
         }
         seriesBar.setVisible(series.isActive)   // a series may have been running at quit
+
+        // First launch: the welcome guide (after the run loop starts, so windows can show).
+        DispatchQueue.main.async { [weak self] in self?.onboarding.showIfNeeded() }
 
         KeyboardShortcuts.onKeyUp(for: .togglePanel) { [weak self] in
             self?.panelController.toggle()

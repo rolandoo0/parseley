@@ -106,6 +106,7 @@ final class AppEnvironment {
                     self.series.ingest(result.clip, format: mode.numberFormat)
                 }
                 if case .inserted(let clip) = result { runAutoRecipe(on: clip, mode: mode) }
+                reportToTour(copied: result.clip)
             }
             refreshCounts()
             // Keep the panel live if it's open while you copy something.
@@ -115,14 +116,24 @@ final class AppEnvironment {
         refreshCounts()
 
         settings.onChange = { [weak self] in self?.applySettings() }
-        series.onActiveChanged = { [weak self] active in self?.seriesBar.setVisible(active) }
+        series.onActiveChanged = { [weak self] active in
+            self?.seriesBar.setVisible(active)
+            if active { self?.onboarding.guide.record(.startedSeries) }
+        }
         series.announce = { [weak self] message in self?.toast.show(message, icon: "sum") }
         series.onHistoryChanged = { [weak self] in
             guard let self else { return }
+            onboarding.guide.record(.savedSeriesTotal)   // a finished series' total was saved
             refreshCounts()
             if panelController.isVisible { panelModel.reload() }
         }
         seriesBar.setVisible(series.isActive)   // a series may have been running at quit
+
+        // The interactive welcome tour reacts to what the user actually does.
+        onboarding.series = series
+        panelController.onShow = { [weak self] in self?.onboarding.guide.record(.openedPanel) }
+        panelModel.onStatCopied = { [weak self] in self?.onboarding.guide.record(.copiedStat) }
+        panelModel.onCommandRun = { [weak self] in self?.onboarding.guide.record(.ranCommand) }
 
         // First launch: the welcome guide (after the run loop starts, so windows can show).
         DispatchQueue.main.async { [weak self] in self?.onboarding.showIfNeeded() }
@@ -161,6 +172,17 @@ final class AppEnvironment {
         try? store.deleteAll(keepingPinned: keepingPinned)
         refreshCounts()
         panelModel.reload()
+    }
+
+    /// Tells the welcome tour about a copy (only while the tour is open: it parses text).
+    private func reportToTour(copied clip: Clip) {
+        guard onboarding.isShowing else { return }
+        if ClipDigest(content: clip.content).numbers.count >= 2 {
+            onboarding.guide.record(.copiedNumbers)
+        }
+        if (series.stats?.count ?? 0) >= 3 {
+            onboarding.guide.record(.seriesHasThreeValues)
+        }
     }
 
     /// A mode's automatic recipe: transform the fresh copy and put the result on the

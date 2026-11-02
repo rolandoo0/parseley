@@ -10,6 +10,8 @@ final class PanelController {
     private let model: HistoryPanelModel
     private var keyMonitor: Any?
     private var isShown = false
+    /// Called each time the panel opens (the welcome tour listens).
+    var onShow: (() -> Void)?
     /// The app that was frontmost when the panel opened: where Enter will paste.
     private var previousApp: NSRunningApplication?
 
@@ -52,6 +54,7 @@ final class PanelController {
         // The shadow is computed from the window's pixels; recompute once content is drawn.
         DispatchQueue.main.async { [weak self] in self?.panel.invalidateShadow() }
         installKeyMonitor()
+        onShow?()
     }
 
     func hide() {

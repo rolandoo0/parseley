@@ -180,6 +180,10 @@ final class HistoryPanelModel {
 
     // MARK: - Dependencies
 
+    /// Welcome-tour hooks (set by AppEnvironment).
+    @ObservationIgnored var onStatCopied: (() -> Void)?
+    @ObservationIgnored var onCommandRun: (() -> Void)?
+
     // Wired up by PanelController.
     @ObservationIgnored var closePanel: () -> Void = {}
     @ObservationIgnored var pasteTarget: () -> NSRunningApplication? = { nil }
@@ -315,6 +319,7 @@ final class HistoryPanelModel {
         let command = list[index]
         query = ""            // leave the command bar first…
         command.run()         // …so the command's own selection/toast stick
+        onCommandRun?()
     }
 
     /// Click on a stat tile: copy its value (it also lands in history). The panel stays
@@ -324,6 +329,7 @@ final class HistoryPanelModel {
             try monitor.copyToClipboard(newText: item.copyText)
             reload()
             showToast("Copied \(item.label.lowercased()): \(item.display)")
+            onStatCopied?()
         } catch {
             errorMessage = "Couldn't copy: \(error.localizedDescription)"
         }

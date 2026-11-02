@@ -1,0 +1,65 @@
+# XcodeGen spec. Generate the Xcode project with:
+#   brew install xcodegen   # once
+#   xcodegen                # whenever this file changes or files are added/removed
+# Parseley.xcodeproj is generated and git-ignored: edit this file, not the project.
+name: Parseley
+
+options:
+  bundleIdPrefix: com.example          # TODO: change to your own reverse-DNS prefix
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"               # matches the package's Swift 5 language mode
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+packages:
+  ParseleyKit:
+    path: Packages/ParseleyKit
+
+targets:
+  Parseley:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - "Resources/Info.plist"
+    dependencies:
+      - package: ParseleyKit
+        products:
+          - ParseleyCore
+          - ParseleyStorage
+          - ParseleyCapture
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Parseley
+        LSApplicationCategoryType: public.app-category.productivity
+        # Menu-bar-only app: no Dock icon, no app menu bar.
+        LSUIElement: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.parseley   # TODO: change with bundleIdPrefix
+        # No App Sandbox: auto-paste (M2) posts a synthetic ⌘V, which needs the
+        # Accessibility permission and doesn't work well for sandboxed apps.
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        # "Sign to Run Locally" (ad-hoc). Fine for M1. In M2, set your team in Xcode
+        # (Signing & Capabilities) or here via DEVELOPMENT_TEAM, otherwise macOS forgets
+        # the Accessibility permission after every rebuild.
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+
+schemes:
+  Parseley:
+    build:
+      targets:
+        Parseley: all
+    run:
+      config: Debug

@@ -30,6 +30,8 @@ final class SeriesController {
     @ObservationIgnored private let store: ClipStore
     /// Called after a series total was saved to history (AppEnvironment refreshes).
     @ObservationIgnored var onHistoryChanged: (() -> Void)?
+    /// Shows a message when the bar isn't visible (set to the app's toast).
+    @ObservationIgnored var announce: ((String) -> Void)?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
 
     init(tracker: SeriesTracker, monitor: ClipboardMonitor, store: ClipStore, appInfo: AppInfoCache) {
@@ -158,6 +160,7 @@ final class SeriesController {
         do {
             try monitor.copyToClipboard(newText: text)
             showToast(message)
+            if !isActive { announce?(message) }   // no bar to show it in
         } catch {
             showToast("Couldn't copy: \(error.localizedDescription)")
         }

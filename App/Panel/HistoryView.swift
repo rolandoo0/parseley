@@ -233,6 +233,10 @@ struct HistoryView: View {
             HStack(spacing: 6) {
                 TransformChip(title: "Add to series", icon: "sum") { model.addSelectionToSeries() }
                     .help("Add the selected clip(s) to the running series (starts one if needed)")
+                if model.multi.isActive {
+                    TransformChip(title: "Queue", icon: "list.number") { model.queueSelection() }
+                        .help("Paste these clips one by one: press ⌃⌥⌘V in any app")
+                }
                 Rectangle().fill(Theme.hairline).frame(width: 1, height: 16)
                 TransformBarView(transforms: model.transforms) { model.applyTransform($0) }
             }

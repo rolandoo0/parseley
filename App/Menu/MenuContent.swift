@@ -21,6 +21,12 @@ struct MenuContent: View {
 
         seriesSection
 
+        if let status = env.pasteQueue.status {
+            Divider()
+            Text(verbatim: "\(status) · ⌃⌥⌘V pastes the next")
+            Button("Cancel Queue") { env.pasteQueue.cancel() }
+        }
+
         Divider()
 
         if let error = env.storageError {

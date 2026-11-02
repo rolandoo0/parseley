@@ -19,4 +19,7 @@ extension KeyboardShortcuts.Name {
 
     /// Copies the running series' total (or the last series' total). Default ⌃⌥⌘C.
     static let copySeriesTotal = Self("copySeriesTotal", default: .init(.c, modifiers: [.control, .option, .command]))
+
+    /// Pastes the next item of the paste queue. Default ⌃⌥⌘V.
+    static let pasteNext = Self("pasteNext", default: .init(.v, modifiers: [.control, .option, .command]))
 }

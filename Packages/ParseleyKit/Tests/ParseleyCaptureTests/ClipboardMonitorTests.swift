@@ -159,3 +159,15 @@ final class FakeFrontmostApp: FrontmostAppProvider {
         #expect(try history() == ["theirs", "mine"])
     }
 }
+
+@Suite struct ClipboardMonitorQuietWriteTests {
+    @Test func writeWithoutRecordingIsNotCapturedOrStored() throws {
+        let pasteboard = FakePasteboard()
+        let store = InMemoryClipStore()
+        let monitor = ClipboardMonitor(pasteboard: pasteboard, frontmostApp: FakeFrontmostApp(), store: store)
+        monitor.writeWithoutRecording("queued item")
+        #expect(monitor.currentText == "queued item")
+        #expect(monitor.poll() == nil)
+        #expect(try store.count() == 0)
+    }
+}

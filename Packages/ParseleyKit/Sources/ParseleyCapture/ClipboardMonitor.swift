@@ -161,6 +161,15 @@ public final class ClipboardMonitor {
         return NewClip(content: text, kind: kind, sourceBundleID: source, numbers: numbers)
     }
 
+    /// Puts text on the clipboard without recording it in history (e.g. paste-queue items,
+    /// restoring the clipboard afterwards).
+    public func writeWithoutRecording(_ text: String) {
+        writeOwn(text)
+    }
+
+    /// The current clipboard text (to restore it later).
+    public var currentText: String? { pasteboard.readString() }
+
     /// Writes to the clipboard and marks that change as already seen, so the next poll
     /// doesn't capture it a second time.
     private func writeOwn(_ text: String) {

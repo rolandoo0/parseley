@@ -17,8 +17,10 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             PrivacySettings(settings: settings)
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
-            ModeSettings(modes: env.modes)
+            ModeSettings(modes: env.modes, recipes: env.recipes)
                 .tabItem { Label("Modes", systemImage: "square.stack.3d.up") }
+            RecipeSettings(recipes: env.recipes)
+                .tabItem { Label("Recipes", systemImage: "wand.and.stars") }
             SeriesSettings(settings: settings)
                 .tabItem { Label("Series", systemImage: "sum") }
         }
@@ -206,6 +208,7 @@ private struct SeriesSettings: View {
 
 private struct ModeSettings: View {
     let modes: ModeController
+    let recipes: RecipeController
     @State private var selectedID: String? = Mode.generalID
     @State private var confirmingReset = false
 
@@ -234,7 +237,7 @@ private struct ModeSettings: View {
             }
 
             if let id = selectedID, modes.library.mode(id: id) != nil {
-                ModeEditor(mode: modes.binding(for: id), modes: modes)
+                ModeEditor(mode: modes.binding(for: id), modes: modes, recipes: recipes)
                     .id(id)   // fresh editor state per mode
             } else {
                 Text("Select a mode").foregroundStyle(.secondary).frame(maxWidth: .infinity)
@@ -252,6 +255,7 @@ private struct ModeSettings: View {
 private struct ModeEditor: View {
     @Binding var mode: Mode
     let modes: ModeController
+    let recipes: RecipeController
 
     private static let icons = [
         "list.clipboard", "dollarsign.circle", "cylinder.split.1x2",
@@ -274,6 +278,17 @@ private struct ModeEditor: View {
                 }
                 Toggle("Show stats and sums", isOn: $mode.showsNumbers)
                 Toggle("Copies count toward a running series", isOn: $mode.countsInSeries)
+                Picker("Run a recipe on every copy:", selection: $mode.autoRecipeID) {
+                    Text("Off").tag(String?.none)
+                    ForEach(recipes.recipes) { recipe in
+                        Text(recipe.name).tag(String?.some(recipe.id))
+                    }
+                }
+                if mode.autoRecipeID != nil {
+                    Text("Each copy made in this mode's apps is transformed and the result replaces the clipboard. The original stays in history.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Switches on in these apps") {
@@ -321,5 +336,100 @@ private struct ModeEditor: View {
         for url in panel.urls {
             if let id = Bundle(url: url)?.bundleIdentifier { modes.assign(app: id, to: mode.id) }
         }
+    }
+}
+
+// MARK: - Recipes
+
+private struct RecipeSettings: View {
+    let recipes: RecipeController
+    @State private var selectedID: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                List(selection: $selectedID) {
+                    ForEach(recipes.recipes) { recipe in
+                        Label(recipe.name, systemImage: "wand.and.stars").tag(recipe.id)
+                    }
+                }
+                .frame(width: 180, height: 320)
+                HStack(spacing: 6) {
+                    Button { selectedID = recipes.addRecipe().id } label: { Image(systemName: "plus") }
+                    Button {
+                        if let id = selectedID { recipes.remove(id: id) }
+                        selectedID = nil
+                    } label: { Image(systemName: "minus") }
+                    .disabled(selectedID == nil)
+                }
+                Text("Recipes appear after the transform buttons and in the > command bar.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 180, alignment: .leading)
+            }
+
+            if let id = selectedID, recipes.recipe(id: id) != nil {
+                RecipeEditor(recipe: recipes.binding(for: id)).id(id)
+            } else {
+                Text("Select a recipe").foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            }
+        }
+        .onAppear { if selectedID == nil { selectedID = recipes.recipes.first?.id } }
+    }
+}
+
+private struct RecipeEditor: View {
+    @Binding var recipe: Recipe
+    @State private var sample = "  banana\napple\n\nbanana\n cherry "
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Name:", text: $recipe.name)
+            }
+            Section("Steps (run top to bottom)") {
+                ForEach(Array(recipe.steps.enumerated()), id: \.offset) { index, stepID in
+                    HStack {
+                        Text("\(index + 1).").foregroundStyle(.secondary).monospacedDigit()
+                        Text(TransformRegistry.transform(id: stepID)?.title ?? stepID)
+                        Spacer()
+                        Button { move(index, by: -1) } label: { Image(systemName: "arrow.up") }
+                            .disabled(index == 0)
+                        Button { move(index, by: 1) } label: { Image(systemName: "arrow.down") }
+                            .disabled(index == recipe.steps.count - 1)
+                        Button { recipe.steps.remove(at: index) } label: { Image(systemName: "minus.circle") }
+                    }
+                    .buttonStyle(.borderless)
+                }
+                Menu("Add Step") {
+                    ForEach(TransformRegistry.all.indices, id: \.self) { i in
+                        let transform = TransformRegistry.all[i]
+                        Button(transform.title) { recipe.steps.append(transform.id) }
+                    }
+                }
+            }
+            Section("Try it") {
+                TextEditor(text: $sample)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(height: 70)
+                Text(verbatim: preview)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var preview: String {
+        guard let transform = recipe.transform() else { return "Add a step to see the result." }
+        do { return try transform.apply(sample) } catch let error as TransformError { return error.message }
+        catch { return error.localizedDescription }
+    }
+
+    private func move(_ index: Int, by delta: Int) {
+        let target = index + delta
+        guard recipe.steps.indices.contains(target) else { return }
+        recipe.steps.swapAt(index, target)
     }
 }

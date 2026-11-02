@@ -28,6 +28,9 @@ final class AppEnvironment {
     @ObservationIgnored let monitor: ClipboardMonitor
     @ObservationIgnored let settings: AppSettings
     @ObservationIgnored let modes: ModeController
+    @ObservationIgnored let recipes: RecipeController
+    @ObservationIgnored let toast: ToastController
+    @ObservationIgnored let pasteQueue: PasteQueueController
     @ObservationIgnored let panelModel: HistoryPanelModel
     @ObservationIgnored let panelController: PanelController
     @ObservationIgnored let series: SeriesController
@@ -59,6 +62,8 @@ final class AppEnvironment {
             configuration: configuration
         )
         let modes = ModeController()
+        let recipes = RecipeController()
+        let toast = ToastController()
         let appInfo = AppInfoCache()
         let panelModel = HistoryPanelModel(store: store, monitor: monitor, modes: modes, appInfo: appInfo)
         let series = SeriesController(
@@ -69,6 +74,7 @@ final class AppEnvironment {
         )
         series.modes = modes
         panelModel.series = series
+        panelModel.recipes = recipes
         // Each copy is read in the number format of the mode its source app belongs to.
         monitor.numberFormatForSource = { [weak modes] source in
             modes?.mode(forSource: source).numberFormat ?? .us
@@ -78,6 +84,9 @@ final class AppEnvironment {
         self.monitor = monitor
         self.settings = settings
         self.modes = modes
+        self.recipes = recipes
+        self.toast = toast
+        self.pasteQueue = PasteQueueController(monitor: monitor, toast: toast)
         self.panelModel = panelModel
         self.panelController = PanelController(model: panelModel)
         self.series = series
@@ -95,6 +104,7 @@ final class AppEnvironment {
                 if mode.countsInSeries {
                     self.series.ingest(result.clip, format: mode.numberFormat)
                 }
+                if case .inserted(let clip) = result { runAutoRecipe(on: clip, mode: mode) }
             }
             refreshCounts()
             // Keep the panel live if it's open while you copy something.
@@ -105,6 +115,7 @@ final class AppEnvironment {
 
         settings.onChange = { [weak self] in self?.applySettings() }
         series.onActiveChanged = { [weak self] active in self?.seriesBar.setVisible(active) }
+        series.announce = { [weak self] message in self?.toast.show(message, icon: "sum") }
         series.onHistoryChanged = { [weak self] in
             guard let self else { return }
             refreshCounts()
@@ -120,6 +131,10 @@ final class AppEnvironment {
         }
         KeyboardShortcuts.onKeyUp(for: .newSeries) { [weak self] in
             self?.series.startNew()
+        }
+        panelModel.pasteQueue = pasteQueue
+        KeyboardShortcuts.onKeyUp(for: .pasteNext) { [weak self] in
+            self?.pasteQueue.pasteNext()
         }
         KeyboardShortcuts.onKeyUp(for: .copySeriesTotal) { [weak self] in
             self?.series.copyCurrentOrLastTotal()
@@ -142,6 +157,24 @@ final class AppEnvironment {
         try? store.deleteAll(keepingPinned: keepingPinned)
         refreshCounts()
         panelModel.reload()
+    }
+
+    /// A mode's automatic recipe: transform the fresh copy and put the result on the
+    /// clipboard (the original stays in history).
+    private func runAutoRecipe(on clip: Clip, mode: Mode) {
+        guard let id = mode.autoRecipeID,
+              let recipe = recipes.recipe(id: id),
+              let transform = recipe.transform(format: mode.numberFormat),
+              let output = try? transform.apply(clip.content),
+              output != clip.content
+        else { return }
+        do {
+            try monitor.copyToClipboard(newText: output, sourceBundleID: clip.sourceBundleID)
+            toast.show("Recipe “\(recipe.name)” applied · original kept in history", icon: "wand.and.stars")
+            refreshCounts()
+        } catch {
+            toast.show("Recipe “\(recipe.name)” failed", icon: "exclamationmark.triangle.fill")
+        }
     }
 
     /// Pushes changed settings into the running services.

@@ -58,13 +58,17 @@ final class HistoryPanelModel {
     let modes: ModeController
     /// Set by AppEnvironment (created after this model).
     @ObservationIgnored weak var series: SeriesController?
+    @ObservationIgnored weak var recipes: RecipeController?
+    @ObservationIgnored weak var pasteQueue: PasteQueueController?
 
     var mode: Mode { modes.current }
     private var format: NumberFormat { mode.numberFormat }
 
-    /// Transform buttons in the current mode's order, reading numbers in its format.
+    /// Transform buttons in the current mode's order (reading numbers in its format),
+    /// followed by the user's recipes.
     var transforms: [any Transform] {
         TransformRegistry.ordered(pinned: mode.pinnedTransforms, format: format)
+            + (recipes?.transforms(format: format) ?? [])
     }
 
     // MARK: - Selection
@@ -360,6 +364,18 @@ final class HistoryPanelModel {
         }
     }
 
+    /// "Queue" chip: paste the selected clips one by one with ⌃⌥⌘V. Closes the panel so
+    /// you can click into the target field.
+    func queueSelection() {
+        startQueue(with: selectedClips)
+    }
+
+    private func startQueue(with clips: [Clip]) {
+        guard !clips.isEmpty, let pasteQueue else { return }
+        pasteQueue.start(with: clips)
+        closePanel()
+    }
+
     /// "Add to series" chip: every selected clip, included even if it mixes text.
     func addSelectionToSeries() {
         addToSeries(selectedClips)
@@ -401,7 +417,8 @@ final class HistoryPanelModel {
         // Transforms, in the mode's order.
         for transform in transforms {
             list.append(PanelCommand(
-                id: "transform.\(transform.id)", title: transform.title, detail: "Transform",
+                id: "transform.\(transform.id)", title: transform.title,
+                detail: transform.id.hasPrefix("recipe.") ? "Recipe" : "Transform",
                 icon: Theme.icon(forTransformID: transform.id)
             ) { [weak self] in self?.applyTransform(transform, to: targets) })
         }
@@ -426,6 +443,12 @@ final class HistoryPanelModel {
                     id: "column.\(column.index)", title: "Copy sum of \(column.name)", detail: sum.display, icon: "tablecells"
                 ) { [weak self] in self?.copyStat(sum) })
             }
+        }
+
+        // Paste queue.
+        if targets.count >= 2 {
+            list.append(PanelCommand(id: "queue.start", title: "Paste queue", detail: "\(targets.count) clips · ⌃⌥⌘V",
+                                     icon: "list.number") { [weak self] in self?.startQueue(with: targets) })
         }
 
         // Series.

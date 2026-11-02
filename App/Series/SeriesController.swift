@@ -50,7 +50,11 @@ final class SeriesController {
 
     /// Start if nothing is running, otherwise stop.
     func toggle() {
-        tracker.isActive ? tracker.stop() : tracker.start()
+        if tracker.isActive {
+            tracker.stop()
+        } else {
+            tracker.start()
+        }
     }
 
     /// End the current series (it's saved) and start a fresh one.

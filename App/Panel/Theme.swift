@@ -47,6 +47,7 @@ enum Theme {
     static func color(for kind: ClipKind) -> Color {
         switch kind {
         case .number, .numberList: cyan
+        case .seriesTotal: mint
         case .table: mint
         case .json: amber
         case .url, .email: violet

@@ -7,10 +7,12 @@ public enum ClipKind: String, Codable, CaseIterable, Sendable {
     case json
     /// Tab-separated rows with a consistent column count (e.g. a range copied from a spreadsheet).
     case table
-    /// Exactly one number. (Detected from M3 on, once the number parser exists.)
+    /// Exactly one number.
     case number
-    /// Two or more numbers: the stats strip applies. (Detected from M3 on.)
+    /// Two or more numbers: the stats strip applies.
     case numberList
+    /// The total of a finished series, saved by Parseley. Never trimmed by the history limit.
+    case seriesTotal
 
     public init(storedValue: String) {
         self = ClipKind(rawValue: storedValue) ?? .text
@@ -25,6 +27,7 @@ public enum ClipKind: String, Codable, CaseIterable, Sendable {
         case .table: "Table"
         case .number: "Number"
         case .numberList: "Numbers"
+        case .seriesTotal: "Series total"
         }
     }
 }

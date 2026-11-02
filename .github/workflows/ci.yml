@@ -45,7 +45,7 @@ jobs:
       - name: Build app (unsigned)
         run: |
           xcodegen
-          set -o pipefail
+          status=0
           xcodebuild \
             -project Parseley.xcodeproj \
             -scheme Parseley \
@@ -53,5 +53,7 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build 2>&1 | grep -E "error:|warning: .*App/|BUILD (SUCCEEDED|FAILED)|\*\* " || true
-          test -d build/Build/Products/Debug/Parseley.app
+            build > xcodebuild.log 2>&1 || status=$?
+          # Show only what matters: errors, warnings in our code, and the verdict.
+          grep -E "error:|warning: .*/App/|BUILD (SUCCEEDED|FAILED)" xcodebuild.log || tail -n 40 xcodebuild.log
+          exit $status

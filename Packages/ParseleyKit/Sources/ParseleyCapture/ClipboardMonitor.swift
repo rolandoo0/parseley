@@ -120,7 +120,7 @@ public final class ClipboardMonitor {
         }
 
         do {
-            let result = try store.insert(NewClip(content: text, kind: kind(of: text, from: source), sourceBundleID: source))
+            let result = try store.insert(newClip(text, from: source))
             if case .inserted = result {
                 try store.trim(toUnpinnedLimit: configuration.historyLimit)
             }
@@ -144,15 +144,21 @@ public final class ClipboardMonitor {
     @discardableResult
     public func copyToClipboard(newText text: String, sourceBundleID: String? = nil) throws -> InsertResult {
         writeOwn(text)
-        let result = try store.insert(NewClip(content: text, kind: kind(of: text, from: sourceBundleID), sourceBundleID: sourceBundleID))
+        let result = try store.insert(newClip(text, from: sourceBundleID))
         if case .inserted = result {
             try store.trim(toUnpinnedLimit: configuration.historyLimit)
         }
         return result
     }
 
-    private func kind(of text: String, from source: String?) -> ClipKind {
-        TypeDetector(format: numberFormatForSource(source)).detect(text)
+    /// Kind and numbers, read in the source app's number format. Very long clips skip the
+    /// number scan (they're stored as plain text) so capture stays instant.
+    private func newClip(_ text: String, from source: String?) -> NewClip {
+        let format = numberFormatForSource(source)
+        let scannable = text.utf16.count <= ClipDigest.maxScanLength
+        let kind = scannable ? TypeDetector(format: format).detect(text) : .text
+        let numbers = scannable ? NumberParser(format: format).parse(text).map(\.value) : []
+        return NewClip(content: text, kind: kind, sourceBundleID: source, numbers: numbers)
     }
 
     /// Writes to the clipboard and marks that change as already seen, so the next poll

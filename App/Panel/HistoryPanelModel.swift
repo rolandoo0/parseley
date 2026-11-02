@@ -11,7 +11,12 @@ struct PanelCommand: Identifiable {
     /// Extra info shown on the right ("1,492.5", "Transform", "Mode").
     let detail: String
     let icon: String
+    /// Extra words it should be found by ("sum total" for "Copy series total").
+    var keywords: String = ""
     let run: () -> Void
+
+    /// What the command bar matches against: the title first, then the keywords.
+    var searchText: String { keywords.isEmpty ? title : "\(title) \(keywords)" }
 }
 
 /// State and actions behind the history panel. The view (HistoryView) only renders this
@@ -166,7 +171,7 @@ final class HistoryPanelModel {
 
     /// Commands matching what's typed after ">", best first.
     var commands: [PanelCommand] {
-        FuzzyMatch.rank(allCommands, query: String(query.dropFirst()), key: \.title)
+        FuzzyMatch.rank(allCommands, query: String(query.dropFirst()), key: \.searchText)
     }
 
     /// What the commands will act on, for the header ("3 clips", "“$1,204.50…”").
@@ -429,12 +434,17 @@ final class HistoryPanelModel {
             ) { [weak self] in self?.applyTransform(transform, to: targets) })
         }
 
-        // Stats of the targets.
-        if mode.showsNumbers, let stats = combinedStats(of: targets), stats.count >= 2 {
-            for item in stats.items(format: format, primary: mode.primaryStat) {
+        // Stats of the targets: as soon as there's one number (the sum of "30" is 30).
+        if mode.showsNumbers, let stats = combinedStats(of: targets) {
+            let keywords = ["Sum": "total add", "Average": "mean avg", "Count": "how many number",
+                            "Median": "middle", "Min": "minimum lowest smallest", "Max": "maximum highest largest"]
+            // With a single number only "sum" means anything (count 1, min = max = it).
+            let items = stats.items(format: format, primary: mode.primaryStat)
+                .filter { stats.count >= 2 || $0.label == "Sum" }
+            for item in items {
                 list.append(PanelCommand(
                     id: "stat.\(item.label)", title: "Copy \(item.label.lowercased())", detail: item.display,
-                    icon: "number"
+                    icon: "number", keywords: keywords[item.label] ?? ""
                 ) { [weak self] in self?.copyStat(item) })
             }
         }
@@ -446,7 +456,8 @@ final class HistoryPanelModel {
             for column in table.numericColumns {
                 guard let sum = column.stats?.items(format: format).first(where: { $0.label == "Sum" }) else { continue }
                 list.append(PanelCommand(
-                    id: "column.\(column.index)", title: "Copy sum of \(column.name)", detail: sum.display, icon: "tablecells"
+                    id: "column.\(column.index)", title: "Copy sum of \(column.name)", detail: sum.display, icon: "tablecells",
+                    keywords: "total column"
                 ) { [weak self] in self?.copyStat(sum) })
             }
         }
@@ -459,22 +470,26 @@ final class HistoryPanelModel {
 
         // Series.
         if !targets.isEmpty {
-            list.append(PanelCommand(id: "series.add", title: "Add to series", detail: "Series", icon: "sum") {
+            list.append(PanelCommand(id: "series.add", title: "Add to series", detail: "Series", icon: "sum",
+                                     keywords: "sum tally running total") {
                 [weak self] in self?.addToSeries(targets)
             })
         }
         if let series {
             if series.isActive {
                 list.append(PanelCommand(id: "series.copy", title: "Copy series total",
-                                         detail: series.sumItem?.display ?? "", icon: "sum") { series.copySum() })
-                list.append(PanelCommand(id: "series.new", title: "New series", detail: "Series", icon: "plus") {
+                                         detail: series.sumItem?.display ?? "", icon: "sum", keywords: "sum tally") { series.copySum() })
+                list.append(PanelCommand(id: "series.new", title: "New series", detail: "Series", icon: "plus",
+                                         keywords: "tally reset start") {
                     series.startNew()
                 })
-                list.append(PanelCommand(id: "series.stop", title: "Stop series", detail: "Series", icon: "stop.fill") {
+                list.append(PanelCommand(id: "series.stop", title: "Stop series", detail: "Series", icon: "stop.fill",
+                                         keywords: "tally end finish save total") {
                     series.stop()
                 })
             } else {
-                list.append(PanelCommand(id: "series.start", title: "Start series", detail: "Series", icon: "play.fill") {
+                list.append(PanelCommand(id: "series.start", title: "Start series", detail: "Series", icon: "play.fill",
+                                         keywords: "tally running total sum") {
                     series.toggle()
                 })
             }

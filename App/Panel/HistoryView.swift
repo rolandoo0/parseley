@@ -198,12 +198,9 @@ struct HistoryView: View {
                     .padding(.bottom, 8)
                 }
                 .scrollIndicators(.hidden)
-                .overlay {
-                    if model.commands.isEmpty {
-                        Text("No matching command")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundStyle(Theme.textSecondary)
-                    }
+                // Top-aligned so it sits right under what you typed, not off at the bottom.
+                .overlay(alignment: .top) {
+                    if model.commands.isEmpty { NoCommandHint(query: String(model.query.dropFirst())) }
                 }
                 .onChange(of: model.commandIndex) { _, index in proxy.scrollTo(index) }
             }
@@ -686,5 +683,27 @@ struct ColumnChips: View {
                 .overlay(Capsule().strokeBorder(isOn ? Theme.cyan.opacity(0.5) : Theme.hairline, lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Shown in the command bar when nothing matches what was typed after ">".
+private struct NoCommandHint: View {
+    let query: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(verbatim: "No command matches \u{201C}\(query.trimmingCharacters(in: .whitespaces))\u{201D}")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.textPrimary)
+            Text(verbatim: "Try  >sum   >sort   >sql   >series   >pin   >mode")
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(Theme.textSecondary)
+            Text(verbatim: "Commands depend on the selected clip: stats need a clip with numbers.")
+                .font(.system(size: 11, design: .rounded))
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
     }
 }

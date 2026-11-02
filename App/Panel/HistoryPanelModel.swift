@@ -31,7 +31,13 @@ final class HistoryPanelModel {
 
     /// Stats for the selected clip, if it contains 2+ numbers.
     var selectedStats: NumberStats? {
-        guard let clip = selectedClip, let id = clip.id else { return nil }
+        guard let clip = selectedClip else { return nil }
+        return stats(for: clip)
+    }
+
+    /// Stats for any clip with 2+ numbers (rows show the sum inline). Cached per clip.
+    func stats(for clip: Clip) -> NumberStats? {
+        guard let id = clip.id else { return nil }
         if let cached = statsCache[id] { return cached }
         // Very large clips: skip, to keep the panel instant.
         let stats = clip.content.utf16.count <= Self.maxStatsLength ? NumberStats(text: clip.content) : nil

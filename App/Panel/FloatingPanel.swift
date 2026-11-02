@@ -1,6 +1,6 @@
 import AppKit
 
-/// A Spotlight-style floating window.
+/// A Spotlight-style floating window with a transparent, frosted "crystal" body.
 ///
 /// Why an `NSPanel` subclass rather than a SwiftUI `Window` scene:
 /// - `.nonactivatingPanel` lets the panel take keyboard focus *without* activating
@@ -9,6 +9,10 @@ import AppKit
 ///   activation and we'd have to hand it back.
 /// - Panels can float above other apps' windows, appear over full-screen apps, and
 ///   aren't listed in ⌘Tab or the Window menu.
+///
+/// The window itself is borderless and fully transparent; the rounded glass shape, blur
+/// and edge highlight are drawn by SwiftUI (CrystalBackground in Theme.swift). macOS
+/// computes the drop shadow from the drawn pixels, so the shadow follows the rounded shape.
 final class FloatingPanel: NSPanel {
     /// Called when the panel stops being the key window (e.g. you clicked elsewhere).
     var onResignKey: (() -> Void)?
@@ -16,7 +20,7 @@ final class FloatingPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.nonactivatingPanel, .titled, .resizable, .fullSizeContentView],
+            styleMask: [.nonactivatingPanel, .borderless],
             backing: .buffered,
             defer: false
         )
@@ -24,17 +28,16 @@ final class FloatingPanel: NSPanel {
         level = .floating
         // Show on whichever Space is current, including over full-screen apps.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        // `.titled` gives us rounded corners and a shadow; then we hide the title bar.
-        titleVisibility = .hidden
-        titlebarAppearsTransparent = true
-        standardWindowButton(.closeButton)?.isHidden = true
-        standardWindowButton(.miniaturizeButton)?.isHidden = true
-        standardWindowButton(.zoomButton)?.isHidden = true
+        // Transparent window: only what SwiftUI draws is visible.
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        // The crystal design is dark glass regardless of the system appearance.
+        appearance = NSAppearance(named: .darkAqua)
         isMovableByWindowBackground = true
         hidesOnDeactivate = false
         isReleasedWhenClosed = false     // we reuse one panel for the app's lifetime
-        animationBehavior = .utilityWindow
-        minSize = NSSize(width: 420, height: 320)
+        animationBehavior = .none        // we fade in ourselves (PanelController)
     }
 
     // Borderless/non-activating panels refuse key status by default, which would mean no

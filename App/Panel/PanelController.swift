@@ -13,11 +13,9 @@ final class PanelController {
     /// The app that was frontmost when the panel opened: where Enter will paste.
     private var previousApp: NSRunningApplication?
 
-    private static let defaultSize = NSSize(width: 600, height: 580)
-
     init(model: HistoryPanelModel) {
         self.model = model
-        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: Self.defaultSize))
+        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: Theme.panelSize))
         // NSHostingView is the bridge that puts a SwiftUI view tree inside an AppKit window.
         panel.contentView = NSHostingView(rootView: HistoryView(model: model))
 
@@ -44,7 +42,15 @@ final class PanelController {
         model.prepareForShow()
         positionNearCursor()
         // Becomes key (gets keyboard input) without activating Parseley. See FloatingPanel.
+        panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        // Quick fade-in. `animator()` is AppKit's way of animating a property change.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.14
+            self.panel.animator().alphaValue = 1
+        }
+        // The shadow is computed from the window's pixels; recompute once content is drawn.
+        DispatchQueue.main.async { [weak self] in self?.panel.invalidateShadow() }
         installKeyMonitor()
     }
 

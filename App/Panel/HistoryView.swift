@@ -26,9 +26,13 @@ struct HistoryView: View {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 6)
             }
-            clipList
-            if let clip = model.selectedClip {
-                detail(for: clip)
+            if model.isCommandMode {
+                commandList
+            } else {
+                clipList
+                if let clip = model.selectedClip {
+                    detail(for: clip)
+                }
             }
             footer
         }
@@ -58,6 +62,8 @@ struct HistoryView: View {
             .font(.system(size: 19, weight: .medium, design: .rounded))
             .foregroundStyle(Theme.textPrimary)
             .focused($searchFocused)
+
+            ModeChip(modes: model.modes)
 
             Text(verbatim: "\(model.clips.count)")
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
@@ -118,7 +124,7 @@ struct HistoryView: View {
                             isSelected: clip.id == model.selection.selectedID,
                             isMultiSelected: model.multi.contains(clip.id),
                             app: model.appInfo.info(for: clip.sourceBundleID),
-                            stats: model.stats(for: clip)
+                            summary: model.rowSummary(for: clip)
                         )
                         .id(clip.id)
                         // Order matters: the double-tap gesture must come first or the
@@ -160,6 +166,50 @@ struct HistoryView: View {
         }
     }
 
+    // MARK: - Command bar
+
+    private var commandList: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "command")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(verbatim: "Run on \(model.commandTargetDescription)")
+                    .lineLimit(1)
+                Spacer()
+                KeyCap(key: "esc")
+                Text("Back").foregroundStyle(Theme.textTertiary)
+            }
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        let commands = model.commands
+                        ForEach(Array(commands.enumerated()), id: \.element.id) { index, command in
+                            CommandRow(command: command, isSelected: index == model.commandIndex)
+                                .id(index)
+                                .onTapGesture { model.runCommand(at: index) }
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 8)
+                }
+                .scrollIndicators(.hidden)
+                .overlay {
+                    if model.commands.isEmpty {
+                        Text("No matching command")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                .onChange(of: model.commandIndex) { _, index in proxy.scrollTo(index) }
+            }
+        }
+    }
+
     // MARK: - Detail (preview, stats, transforms)
 
     private func detail(for clip: Clip) -> some View {
@@ -170,8 +220,8 @@ struct HistoryView: View {
                 preview(of: clip)
             }
 
-            if let stats = model.multi.isActive ? model.combinedStats : model.selectedStats {
-                StatsStripView(stats: stats) { model.copyStat($0) }
+            if !model.statItems.isEmpty {
+                StatsStripView(items: model.statItems) { model.copyStat($0) }
                     // Fade/slide in when moving onto a clip that has numbers.
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
@@ -180,7 +230,7 @@ struct HistoryView: View {
                 TransformChip(title: "Add to series", icon: "sum") { model.addSelectionToSeries() }
                     .help("Add the selected clip(s) to the running series (starts one if needed)")
                 Rectangle().fill(Theme.hairline).frame(width: 1, height: 16)
-                TransformBarView { model.applyTransform($0) }
+                TransformBarView(transforms: model.transforms) { model.applyTransform($0) }
             }
         }
         .padding(.horizontal, 14)
@@ -245,6 +295,7 @@ struct HistoryView: View {
                 hint("⌘⏎", "Copy")
                 hint("⌘P", "Pin")
                 hint("⌘⌫", "Delete")
+                hint(">", "Commands")
             }
             Spacer()
             hint("esc", "Close")
@@ -273,8 +324,8 @@ struct ClipRow: View {
     /// Part of a ⌘/⇧-click multi-selection.
     var isMultiSelected = false
     let app: AppInfo?
-    /// Present when the clip has 2+ numbers: the row then shows its sum inline.
-    let stats: NumberStats?
+    /// "Σ 1,492.5 · 3 values" when the clip has 2+ numbers (and the mode shows numbers).
+    let summary: String?
 
     @State private var hovering = false
 
@@ -299,8 +350,8 @@ struct ClipRow: View {
                     .truncationMode(.tail)
                 HStack(spacing: 7) {
                     KindBadge(kind: clip.kind)
-                    if let stats, let sum = stats.items.first(where: { $0.label == "Sum" }) {
-                        Text(verbatim: "Σ \(sum.display)  ·  \(stats.count) values")
+                    if let summary {
+                        Text(verbatim: summary)
                             .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             .foregroundStyle(Theme.cyan.opacity(0.9))
                             .lineLimit(1)
@@ -357,7 +408,7 @@ struct ClipRow: View {
     private var metadata: String {
         var parts: [String] = []
         let lines = ClipPreview.lineCount(clip.content)
-        if lines > 1 && stats == nil { parts.append("\(lines) lines") }
+        if lines > 1 && summary == nil { parts.append("\(lines) lines") }
         if let name = app?.name { parts.append(name) }
         parts.append(RelativeTime.string(for: clip.lastUsedAt))
         return parts.joined(separator: " · ")
@@ -366,15 +417,17 @@ struct ClipRow: View {
 
 // MARK: - Stats
 
-/// Count · Sum · Average · Median · Min · Max. Click a tile to copy its value.
+/// Stat tiles, main stat first. Click a tile (or press ⌘1–⌘6) to copy its value.
 struct StatsStripView: View {
-    let stats: NumberStats
+    let items: [NumberStats.Item]
     let onCopy: (NumberStats.Item) -> Void
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(stats.items) { item in
-                StatTile(item: item, emphasized: item.label == "Sum") { onCopy(item) }
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                StatTile(item: item, emphasized: index == 0, shortcut: index < 6 ? "⌘\(index + 1)" : nil) {
+                    onCopy(item)
+                }
             }
         }
     }
@@ -382,8 +435,10 @@ struct StatsStripView: View {
 
 struct StatTile: View {
     let item: NumberStats.Item
-    /// The Sum tile gets the accent gradient: it's what people copy most.
+    /// The mode's main stat gets the accent gradient: it's what people copy most.
     let emphasized: Bool
+    /// "⌘1"…"⌘6", shown next to the label.
+    var shortcut: String? = nil
     let action: () -> Void
 
     @State private var hovering = false
@@ -391,10 +446,18 @@ struct StatTile: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(verbatim: item.label.uppercased())
-                    .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                    .tracking(1.1)
-                    .foregroundStyle(Theme.textTertiary)
+                HStack(spacing: 4) {
+                    Text(verbatim: item.label.uppercased())
+                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                        .tracking(1.1)
+                        .foregroundStyle(Theme.textTertiary)
+                    if let shortcut {
+                        Spacer(minLength: 0)
+                        Text(verbatim: shortcut)
+                            .font(.system(size: 8, weight: .medium, design: .rounded))
+                            .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                    }
+                }
                 Text(verbatim: item.display)
                     .font(.system(size: 15, weight: .semibold, design: .monospaced))
                     .foregroundStyle(emphasized ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.textPrimary))
@@ -421,14 +484,15 @@ struct StatTile: View {
 /// One chip per transform. The result is copied, added to history and selected, so ⏎
 /// pastes it right away.
 struct TransformBarView: View {
+    let transforms: [any Transform]
     let onApply: (any Transform) -> Void
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 6) {
                 // Iterate indices: `any Transform` isn't Identifiable/Hashable itself.
-                ForEach(TransformRegistry.all.indices, id: \.self) { index in
-                    let transform = TransformRegistry.all[index]
+                ForEach(transforms.indices, id: \.self) { index in
+                    let transform = transforms[index]
                     TransformChip(title: transform.title, icon: Theme.icon(forTransformID: transform.id)) {
                         onApply(transform)
                     }
@@ -486,5 +550,89 @@ enum RelativeTime {
     static func string(for date: Date, now: Date = Date()) -> String {
         if now.timeIntervalSince(date) < 10 { return "just now" }
         return formatter.localizedString(for: date, relativeTo: now)
+    }
+}
+
+// MARK: - Command row & mode chip
+
+struct CommandRow: View {
+    let command: PanelCommand
+    let isSelected: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: command.icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(isSelected ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.textSecondary))
+                .frame(width: 20)
+            Text(verbatim: command.title)
+                .font(.system(size: 13.5, weight: .medium))
+                .foregroundStyle(Theme.textPrimary)
+            Spacer()
+            Text(verbatim: command.detail)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Theme.textTertiary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background {
+            let shape = RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous)
+            if isSelected {
+                shape.fill(LinearGradient(colors: [Theme.cyan.opacity(0.20), Theme.violet.opacity(0.14)],
+                                          startPoint: .leading, endPoint: .trailing))
+                    .overlay(shape.strokeBorder(Theme.cyan.opacity(0.35), lineWidth: 1))
+            } else if hovering {
+                shape.fill(Theme.glassFill)
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+}
+
+/// Shows the active mode; click for a menu to lock a mode or go back to automatic.
+struct ModeChip: View {
+    let modes: ModeController
+
+    var body: some View {
+        let current = modes.current
+        Menu {
+            Button {
+                modes.manualModeID = nil
+            } label: {
+                Label("Automatic (follows the app you're in)", systemImage: modes.isAutomatic ? "checkmark" : "wand.and.stars")
+            }
+            Divider()
+            ForEach(modes.library.modes) { mode in
+                Button {
+                    modes.manualModeID = mode.id
+                } label: {
+                    Label(mode.name, systemImage: modes.manualModeID == mode.id ? "checkmark" : mode.icon)
+                }
+            }
+            Divider()
+            SettingsLink { Text("Edit Modes…") }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: current.icon)
+                    .font(.system(size: 10, weight: .semibold))
+                Text(verbatim: current.name)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                if !modes.isAutomatic {
+                    Image(systemName: "lock.fill").font(.system(size: 8))
+                }
+            }
+            .foregroundStyle(Theme.cyan)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Theme.cyan.opacity(0.12)))
+            .overlay(Capsule().strokeBorder(Theme.cyan.opacity(0.35), lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(modes.isAutomatic ? "Mode follows the app you're in" : "Mode locked by hand")
     }
 }

@@ -27,6 +27,7 @@ final class AppEnvironment {
     @ObservationIgnored let store: ClipStore
     @ObservationIgnored let monitor: ClipboardMonitor
     @ObservationIgnored let settings: AppSettings
+    @ObservationIgnored let modes: ModeController
     @ObservationIgnored let panelModel: HistoryPanelModel
     @ObservationIgnored let panelController: PanelController
     @ObservationIgnored let series: SeriesController
@@ -57,16 +58,25 @@ final class AppEnvironment {
             store: store,
             configuration: configuration
         )
-        let panelModel = HistoryPanelModel(store: store, monitor: monitor)
+        let modes = ModeController()
+        let appInfo = AppInfoCache()
+        let panelModel = HistoryPanelModel(store: store, monitor: monitor, modes: modes, appInfo: appInfo)
         let series = SeriesController(
             tracker: SeriesTracker(store: seriesStore, rules: settings.seriesRules),
             monitor: monitor,
-            appInfo: panelModel.appInfo
+            appInfo: appInfo
         )
+        series.modes = modes
+        panelModel.series = series
+        // Each copy is read in the number format of the mode its source app belongs to.
+        monitor.numberFormatForSource = { [weak modes] source in
+            modes?.mode(forSource: source).numberFormat ?? .us
+        }
 
         self.store = store
         self.monitor = monitor
         self.settings = settings
+        self.modes = modes
         self.panelModel = panelModel
         self.panelController = PanelController(model: panelModel)
         self.series = series
@@ -78,7 +88,12 @@ final class AppEnvironment {
             guard let self else { return }
             lastEventDescription = Self.describe(event)
             if case .stored(let result) = event {
-                self.series.ingest(result.clip)   // no-op unless a series is running
+                // Counts toward a running series unless the source app's mode opts out
+                // (Writing, Dev). No-op when no series is running.
+                let mode = modes.mode(forSource: result.clip.sourceBundleID)
+                if mode.countsInSeries {
+                    self.series.ingest(result.clip, format: mode.numberFormat)
+                }
             }
             refreshCounts()
             // Keep the panel live if it's open while you copy something.
@@ -88,7 +103,6 @@ final class AppEnvironment {
         refreshCounts()
 
         settings.onChange = { [weak self] in self?.applySettings() }
-        panelModel.addToSeries = { [weak self] clips in self?.series.add(clips) }
         series.onActiveChanged = { [weak self] active in self?.seriesBar.setVisible(active) }
         seriesBar.setVisible(series.isActive)   // a series may have been running at quit
 
@@ -100,6 +114,9 @@ final class AppEnvironment {
         }
         KeyboardShortcuts.onKeyUp(for: .newSeries) { [weak self] in
             self?.series.startNew()
+        }
+        KeyboardShortcuts.onKeyUp(for: .copySeriesTotal) { [weak self] in
+            self?.series.copyCurrentOrLastTotal()
         }
     }
 

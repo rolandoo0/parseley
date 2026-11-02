@@ -45,7 +45,9 @@ public final class ClipboardMonitor {
     private let pasteboard: Pasteboard
     private let frontmostApp: FrontmostAppProvider
     private let store: ClipStore
-    private let detector: TypeDetector
+    /// Number format to use for a copy from a given app (the app's mode decides).
+    /// Defaults to US for everything.
+    public var numberFormatForSource: (String?) -> NumberFormat = { _ in .us }
     private var lastChangeCount: Int
     private var timer: Timer?
 
@@ -53,13 +55,11 @@ public final class ClipboardMonitor {
         pasteboard: Pasteboard,
         frontmostApp: FrontmostAppProvider,
         store: ClipStore,
-        detector: TypeDetector = TypeDetector(),
         configuration: Configuration = Configuration()
     ) {
         self.pasteboard = pasteboard
         self.frontmostApp = frontmostApp
         self.store = store
-        self.detector = detector
         self.configuration = configuration
         // Don't import whatever was on the clipboard before launch. Only new copies.
         self.lastChangeCount = pasteboard.changeCount
@@ -120,7 +120,7 @@ public final class ClipboardMonitor {
         }
 
         do {
-            let result = try store.insert(NewClip(content: text, kind: detector.detect(text), sourceBundleID: source))
+            let result = try store.insert(NewClip(content: text, kind: kind(of: text, from: source), sourceBundleID: source))
             if case .inserted = result {
                 try store.trim(toUnpinnedLimit: configuration.historyLimit)
             }
@@ -144,11 +144,15 @@ public final class ClipboardMonitor {
     @discardableResult
     public func copyToClipboard(newText text: String, sourceBundleID: String? = nil) throws -> InsertResult {
         writeOwn(text)
-        let result = try store.insert(NewClip(content: text, kind: detector.detect(text), sourceBundleID: sourceBundleID))
+        let result = try store.insert(NewClip(content: text, kind: kind(of: text, from: sourceBundleID), sourceBundleID: sourceBundleID))
         if case .inserted = result {
             try store.trim(toUnpinnedLimit: configuration.historyLimit)
         }
         return result
+    }
+
+    private func kind(of text: String, from source: String?) -> ClipKind {
+        TypeDetector(format: numberFormatForSource(source)).detect(text)
     }
 
     /// Writes to the clipboard and marks that change as already seen, so the next poll

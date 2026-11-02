@@ -3,8 +3,9 @@
 A macOS menu-bar clipboard manager focused on numbers and data. Fully local: no
 network, no accounts, no analytics.
 
-**Status:** M4 step 1: capture, storage, history panel, hotkey, paste, number parser,
-stats, transforms, crystal UI, **series (running tally)**, multi-select, Settings.
+**Status:** capture, storage, history panel, hotkey, paste, number parser, stats,
+transforms, crystal UI, series (running tally), multi-select, Settings, **modes**,
+**command bar**, stat shortcuts.
 
 ## Requirements
 
@@ -36,9 +37,12 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | ⌘P | Pin / unpin |
 | ⌘⌫ | Delete |
 | ⌘-click / ⇧-click | Select several clips (combined stats) |
-| esc or click outside | Close |
+| ⌘1 – ⌘6 | Copy a stat (⌘1 = the mode's main stat) |
+| `>` in search | Command bar: transforms, stats, series, modes by name |
+| esc | Leave search / command bar, then close |
 | ⌃⌥⌘T (anywhere) | Start / stop a series |
 | ⌃⌥⌘N (anywhere) | New series |
+| ⌃⌥⌘C (anywhere) | Copy the series total (or the last series' total) |
 
 Right-click a row for the same actions.
 
@@ -51,7 +55,7 @@ digits, e.g. `1492.5`, ready for a spreadsheet).
 The parser understands `$1,204.50`, `(300)` (negative), `12%`, `-4.5`, `1.2k`, `3M`,
 lists separated by newlines/tabs/commas/spaces, and columns pasted from Excel or Google
 Sheets. It ignores dates, times, versions, IPs, phone numbers and things like `A1` or
-`SKU-1234`. US formatting only for now (`1,204.50`, not `1.204,50`).
+`SKU-1234`. US (`1,204.50`) or European (`1.204,50`) formatting, set per mode.
 
 **Multi-select:** ⌘-click rows to pick several clips, ⇧-click for a range. Stats then
 combine every number across them, and transforms run over all of them (one per line).
@@ -75,11 +79,35 @@ up in a small glass bar that floats near the top of the screen. Drag it anywhere
 - From the history panel, **Add to series** adds the selected clip(s) (starting a
   series if none is running).
 
+### Modes
+
+A mode tailors Parseley to a task, and switches automatically with the app in front:
+
+| Mode | Apps (editable) | What changes |
+|---|---|---|
+| General | everything else | defaults |
+| Finance | Excel, Numbers, QuickBooks, Xero | Sum first; Plain numbers / Comma list / Sort ↓ first |
+| SQL | DataGrip, TablePlus, Postico, Sequel Ace, DBeaver… | Count first; SQL IN / Dedupe / JSON first |
+| Dev | VS Code, Xcode, Cursor, Zed, Terminal, iTerm | JSON / SQL first; copies don't count toward a series |
+| Writing | Pages, Word, Notion, Obsidian, Bear, Notes | numbers hidden; copies don't count toward a series |
+
+Each mode sets: its apps, number format (`1,204.50` or European `1.204,50`), whether
+stats/sums show, whether copies count toward a running series, the main stat (⌘1), and
+which transforms come first. The menu-bar icon and the chip in the panel header show the
+active mode; click the chip (or menu bar → Mode) to lock a mode by hand, or go back to
+Automatic. Edit, add and remove modes in Settings → Modes.
+
+### Command bar
+
+Type `>` in the panel's search field: `>sql`, `>cs` (copy sum), `>new` (new series),
+`>fin` (mode: Finance)… ↑/↓ and ⏎ run a command on the clip(s) that were selected.
+
 ### Settings (menu bar → Settings…)
 
 - **General:** rebind the panel hotkey, history limit (100–10,000), launch at login,
   clear history.
 - **Privacy:** excluded apps (copies made in them are never saved).
+- **Modes:** edit or add task profiles (apps, number format, main stat, transforms).
 - **Series:** hotkeys, idle-gap question (off/5–60 min), ask on app switch.
 
 Launch at login registers the app where it currently lives; for a stable login item,
@@ -137,7 +165,8 @@ Packages/ParseleyKit/
   Sources/ParseleyCore/      Pure Swift: Clip model, ClipStore protocol, TypeDetector,
                              PrivacyPolicy, NumberParser, NumberStats, Transforms
                              (shared `Transform` protocol + TransformChain for recipes),
-                             Series + SeriesTracker (running-tally engine)
+                             Series + SeriesTracker (running-tally engine),
+                             Mode + ModeLibrary (task profiles), FuzzyMatch
   Sources/ParseleyStorage/   ParseleyDatabase (one SQLite file), GRDBClipStore,
                              GRDBSeriesStore, migrations
   Sources/ParseleyCapture/   ClipboardMonitor (polling pipeline) + NSPasteboard adapter

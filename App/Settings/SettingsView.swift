@@ -1,5 +1,6 @@
 import AppKit
 import KeyboardShortcuts
+import ParseleyCore
 import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
@@ -16,10 +17,12 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             PrivacySettings(settings: settings)
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
+            ModeSettings(modes: env.modes)
+                .tabItem { Label("Modes", systemImage: "square.stack.3d.up") }
             SeriesSettings(settings: settings)
                 .tabItem { Label("Series", systemImage: "sum") }
         }
-        .frame(width: 520)
+        .frame(width: 640)
         .padding(20)
         // A menu-bar app isn't "active", so its windows open behind other apps. Bring
         // Parseley forward when Settings opens.
@@ -172,6 +175,7 @@ private struct SeriesSettings: View {
             Section("Shortcuts") {
                 KeyboardShortcuts.Recorder("Start / stop series:", name: .toggleSeries)
                 KeyboardShortcuts.Recorder("New series:", name: .newSeries)
+                KeyboardShortcuts.Recorder("Copy series total:", name: .copySeriesTotal)
             }
 
             Section("New series suggestions") {
@@ -195,5 +199,127 @@ private struct SeriesSettings: View {
             .font(.callout)
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Modes
+
+private struct ModeSettings: View {
+    let modes: ModeController
+    @State private var selectedID: String? = Mode.generalID
+    @State private var confirmingReset = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                List(selection: $selectedID) {
+                    ForEach(modes.library.modes) { mode in
+                        Label(mode.name, systemImage: mode.icon).tag(mode.id)
+                    }
+                }
+                .frame(width: 180, height: 320)
+                HStack(spacing: 6) {
+                    Button { selectedID = modes.addCustomMode().id } label: { Image(systemName: "plus") }
+                    Button {
+                        if let id = selectedID { modes.remove(id: id) }
+                        selectedID = Mode.generalID
+                    } label: { Image(systemName: "minus") }
+                    .disabled(selectedID == nil || selectedID == Mode.generalID)
+                }
+                Button("Reset Built-in Modes…") { confirmingReset = true }
+                    .controlSize(.small)
+                Text("Mode: \(modes.current.name)\(modes.isAutomatic ? " (automatic)" : " (locked)")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let id = selectedID, modes.library.mode(id: id) != nil {
+                ModeEditor(mode: modes.binding(for: id), modes: modes)
+                    .id(id)   // fresh editor state per mode
+            } else {
+                Text("Select a mode").foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            }
+        }
+        .confirmationDialog("Reset the built-in modes?", isPresented: $confirmingReset) {
+            Button("Reset", role: .destructive) { modes.resetBuiltIns() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("General, Finance, SQL, Dev and Writing go back to their original apps and settings. Your own modes are kept.")
+        }
+    }
+}
+
+private struct ModeEditor: View {
+    @Binding var mode: Mode
+    let modes: ModeController
+
+    private static let icons = [
+        "list.clipboard", "dollarsign.circle", "cylinder.split.1x2",
+        "chevron.left.forwardslash.chevron.right", "text.alignleft", "chart.bar",
+        "doc.text", "cart", "briefcase", "flask", "graduationcap", "star",
+    ]
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Name:", text: $mode.name)
+                Picker("Icon:", selection: $mode.icon) {
+                    ForEach(Self.icons, id: \.self) { Image(systemName: $0).tag($0) }
+                }
+                Picker("Numbers look like:", selection: $mode.numberFormat) {
+                    ForEach(NumberFormat.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }
+                Picker("Main stat (⌘1):", selection: $mode.primaryStat) {
+                    ForEach(NumberStats.labels, id: \.self) { Text($0).tag($0) }
+                }
+                Toggle("Show stats and sums", isOn: $mode.showsNumbers)
+                Toggle("Copies count toward a running series", isOn: $mode.countsInSeries)
+            }
+
+            Section("Switches on in these apps") {
+                if mode.id == Mode.generalID {
+                    Text("General is used for every app that no other mode claims.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(mode.apps, id: \.self) { bundleID in
+                        HStack {
+                            ExcludedAppRow(bundleID: bundleID)
+                            Button {
+                                mode.apps.removeAll { $0 == bundleID }
+                            } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                    Button("Add App…") { addApps() }
+                }
+            }
+
+            Section("Transform buttons shown first") {
+                ForEach(TransformRegistry.all.indices, id: \.self) { index in
+                    let transform = TransformRegistry.all[index]
+                    Toggle(transform.title, isOn: Binding(
+                        get: { mode.pinnedTransforms.contains(transform.id) },
+                        set: { pinned in
+                            if pinned { mode.pinnedTransforms.append(transform.id) }
+                            else { mode.pinnedTransforms.removeAll { $0 == transform.id } }
+                        }
+                    ))
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Pick apps; each one moves to this mode (an app belongs to one mode).
+    private func addApps() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add"
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            if let id = Bundle(url: url)?.bundleIdentifier { modes.assign(app: id, to: mode.id) }
+        }
     }
 }

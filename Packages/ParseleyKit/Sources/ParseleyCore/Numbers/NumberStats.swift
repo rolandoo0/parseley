@@ -42,8 +42,17 @@ public struct NumberStats: Equatable, Sendable {
         public let copyText: String
     }
 
-    /// Count, sum, average, median, min, max, in display order.
-    public var items: [Item] {
+    /// Labels in default display order.
+    public static let labels = ["Count", "Sum", "Average", "Median", "Min", "Max"]
+
+    /// Count, sum, average, median, min, max, in display order (US format).
+    public var items: [Item] { items() }
+
+    /// The stat tiles.
+    /// - Parameters:
+    ///   - format: separators for display and copy text ("1.204,5" in European format).
+    ///   - primary: label to move to the front (a mode's main stat, copied by ⌘1).
+    public func items(format: NumberFormat = .us, primary: String? = nil) -> [Item] {
         // Sums/medians of the inputs need at most a little more precision than the
         // inputs themselves; averages can repeat forever (1/3), so cap them.
         let exactDigits = Swift.max(inputFractionDigits + 1, 2)
@@ -51,11 +60,11 @@ public struct NumberStats: Equatable, Sendable {
         func item(_ label: String, _ value: Decimal, _ digits: Int) -> Item {
             Item(
                 label: label, value: value,
-                display: NumberFormatting.grouped(value, maxFractionDigits: digits),
-                copyText: NumberFormatting.plain(value, maxFractionDigits: digits)
+                display: NumberFormatting.grouped(value, maxFractionDigits: digits, format: format),
+                copyText: NumberFormatting.plain(value, maxFractionDigits: digits, format: format)
             )
         }
-        return [
+        let all = [
             item("Count", Decimal(count), 0),
             item("Sum", sum, exactDigits),
             item("Average", mean, meanDigits),
@@ -63,14 +72,25 @@ public struct NumberStats: Equatable, Sendable {
             item("Min", min, exactDigits),
             item("Max", max, exactDigits),
         ]
+        guard let primary, let index = all.firstIndex(where: { $0.label == primary }) else { return all }
+        var ordered = all
+        ordered.insert(ordered.remove(at: index), at: 0)
+        return ordered
     }
 }
 
-/// Decimal → string, locale-independent (always "." for decimals, "," for thousands).
+/// Decimal → string with explicit separators (never the Mac's locale settings, so
+/// output is predictable): US "1,204.5" or European "1.204,5".
 public enum NumberFormatting {
-    /// "1204.5": rounded (half away from zero) to at most `maxFractionDigits`, no
-    /// trailing zeros, no thousands separators.
-    public static func plain(_ value: Decimal, maxFractionDigits: Int = 6) -> String {
+    /// "1204.5" ("1204,5" in European format): rounded (half away from zero) to at most
+    /// `maxFractionDigits`, no trailing zeros, no thousands separators.
+    public static func plain(_ value: Decimal, maxFractionDigits: Int = 6, format: NumberFormat = .us) -> String {
+        let text = machinePlain(value, maxFractionDigits: maxFractionDigits)
+        return format == .us ? text : text.replacingOccurrences(of: ".", with: ",")
+    }
+
+    /// Always "1204.5": for code (SQL, JSON) regardless of format.
+    static func machinePlain(_ value: Decimal, maxFractionDigits: Int) -> String {
         var input = value
         var rounded = Decimal()
         NSDecimalRound(&rounded, &input, maxFractionDigits, .plain)
@@ -79,19 +99,19 @@ public enum NumberFormatting {
         return text == "-0" ? "0" : text
     }
 
-    /// "1,204.5": like `plain`, with thousands separators.
-    public static func grouped(_ value: Decimal, maxFractionDigits: Int = 6) -> String {
-        let text = plain(value, maxFractionDigits: maxFractionDigits)
+    /// "1,204.5" ("1.204,5" in European format): like `plain`, with thousands separators.
+    public static func grouped(_ value: Decimal, maxFractionDigits: Int = 6, format: NumberFormat = .us) -> String {
+        let text = machinePlain(value, maxFractionDigits: maxFractionDigits)
         let negative = text.hasPrefix("-")
         let unsigned = negative ? String(text.dropFirst()) : text
         let parts = unsigned.split(separator: ".", maxSplits: 1)
         let integer = Array(parts[0])
         var groupedInteger = ""
         for (i, ch) in integer.enumerated() {
-            if i > 0 && (integer.count - i) % 3 == 0 { groupedInteger.append(",") }
+            if i > 0 && (integer.count - i) % 3 == 0 { groupedInteger += format.groupingSeparator }
             groupedInteger.append(ch)
         }
-        let fraction = parts.count > 1 ? "." + parts[1] : ""
+        let fraction = parts.count > 1 ? format.decimalSeparator + parts[1] : ""
         return (negative ? "-" : "") + groupedInteger + fraction
     }
 }

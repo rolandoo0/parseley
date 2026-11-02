@@ -37,18 +37,31 @@ public struct TransformChain: Transform {
 
 /// All built-in transforms, in the order the UI shows them.
 public enum TransformRegistry {
-    public static let all: [any Transform] = [
-        CommaListTransform(),
-        SQLInTransform(),
-        JSONArrayTransform(),
-        SortTransform(ascending: true),
-        SortTransform(ascending: false),
-        DedupeTransform(),
-        CleanWhitespaceTransform(),
-        RemoveNumberFormattingTransform(),
-    ]
+    public static let all: [any Transform] = TransformRegistry.all(format: .us)
 
-    public static func transform(id: String) -> (any Transform)? {
-        all.first { $0.id == id }
+    /// The built-ins configured for a number format (how "1,5" or "1.204" is read).
+    public static func all(format: NumberFormat) -> [any Transform] {
+        [
+            CommaListTransform(format: format),
+            SQLInTransform(format: format),
+            JSONArrayTransform(format: format),
+            SortTransform(ascending: true, format: format),
+            SortTransform(ascending: false, format: format),
+            DedupeTransform(format: format),
+            CleanWhitespaceTransform(),
+            RemoveNumberFormattingTransform(format: format),
+        ]
+    }
+
+    public static func transform(id: String, format: NumberFormat = .us) -> (any Transform)? {
+        all(format: format).first { $0.id == id }
+    }
+
+    /// All built-ins with `pinned` ids first (in that order), then the rest in default order.
+    public static func ordered(pinned: [String], format: NumberFormat = .us) -> [any Transform] {
+        let available = all(format: format)
+        let front = pinned.compactMap { id in available.first { $0.id == id } }
+        let rest = available.filter { !pinned.contains($0.id) }
+        return front + rest
     }
 }

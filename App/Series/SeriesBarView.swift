@@ -82,10 +82,10 @@ struct SeriesBarView: View {
                     .padding(.horizontal, 12)
             }
 
-            if let stats = series.stats {
+            if series.stats != nil {
                 // Same tiles as the history panel; three per row fits the bar's width.
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
-                    ForEach(stats.items) { item in
+                    ForEach(series.statItems) { item in
                         StatTile(item: item, emphasized: item.label == "Sum") { series.copy(item) }
                     }
                 }
@@ -111,6 +111,7 @@ struct SeriesBarView: View {
                 // Newest first.
                 ForEach(Array(active.entries.reversed())) { entry in
                     SeriesEntryRow(entry: entry, app: series.appInfo.info(for: entry.sourceBundleID),
+                                   format: series.format,
                                    onInclude: { series.include(entry) },
                                    onExclude: { series.exclude(entry) },
                                    onRemove: { series.remove(entry) })
@@ -219,6 +220,7 @@ struct PromptBanner: View {
 struct SeriesEntryRow: View {
     let entry: SeriesEntry
     let app: AppInfo?
+    let format: NumberFormat
     let onInclude: () -> Void
     let onExclude: () -> Void
     let onRemove: () -> Void
@@ -246,12 +248,12 @@ struct SeriesEntryRow: View {
             Spacer(minLength: 6)
 
             if entry.isIncluded {
-                Text(verbatim: NumberFormatting.grouped(entry.subtotal))
+                Text(verbatim: NumberFormatting.grouped(entry.subtotal, format: format))
                     .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(Theme.cyan)
             } else {
                 BarActionChip(title: "Add", icon: "plus", accent: true, action: onInclude)
-                    .help("Include these numbers: \(entry.values.map { NumberFormatting.grouped($0) }.joined(separator: ", "))")
+                    .help("Include these numbers: \(entry.values.map { NumberFormatting.grouped($0, format: format) }.joined(separator: ", "))")
             }
 
             if hovering {

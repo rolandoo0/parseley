@@ -1,8 +1,8 @@
 import KeyboardShortcuts
 
 // KeyboardShortcuts (by Sindre Sorhus) registers system-wide hotkeys and stores the
-// user's choice in UserDefaults. Each shortcut is a named slot with a default; M4 adds
-// a recorder in Settings so users can rebind it.
+// user's choice in UserDefaults. Each shortcut is a named slot with a default; users
+// can rebind them in Settings (KeyboardShortcuts.Recorder).
 extension KeyboardShortcuts.Name {
     /// Opens/closes the history panel. Default ⌘⇧V.
     ///
@@ -16,4 +16,7 @@ extension KeyboardShortcuts.Name {
 
     /// Ends the running series and starts a fresh one. Default ⌃⌥⌘N.
     static let newSeries = Self("newSeries", default: .init(.n, modifiers: [.control, .option, .command]))
+
+    /// Copies the running series' total (or the last series' total). Default ⌃⌥⌘C.
+    static let copySeriesTotal = Self("copySeriesTotal", default: .init(.c, modifiers: [.control, .option, .command]))
 }

@@ -15,6 +15,10 @@ struct MenuContent: View {
 
         Divider()
 
+        modeSection
+
+        Divider()
+
         seriesSection
 
         Divider()
@@ -41,7 +45,7 @@ struct MenuContent: View {
         let series = env.series
         if let active = series.active {
             Text(verbatim: "● \(active.name) · Σ \(series.sumItem?.display ?? "0") · \(series.stats?.count ?? 0) values")
-            Button("Copy Total") { series.copySum() }
+            Button("Copy Total    ⌃⌥⌘C") { series.copySum() }
             Button("New Series    ⌃⌥⌘N") { series.startNew() }
             Button("Stop Series    ⌃⌥⌘T") { series.stop() }
         } else {
@@ -60,8 +64,28 @@ struct MenuContent: View {
         }
     }
 
+    @ViewBuilder
+    private var modeSection: some View {
+        let modes = env.modes
+        let current = modes.current
+        // An inline Picker inside a Menu renders as checkmarked menu items.
+        Menu("Mode: \(current.name)\(modes.isAutomatic ? " (auto)" : "")") {
+            Picker("Mode", selection: Binding(
+                get: { modes.manualModeID ?? "auto" },
+                set: { modes.manualModeID = $0 == "auto" ? nil : $0 }
+            )) {
+                Text("Automatic (follows the app you're in)").tag("auto")
+                ForEach(modes.library.modes) { mode in
+                    Label(mode.name, systemImage: mode.icon).tag(mode.id)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        }
+    }
+
     private func recentTitle(_ series: Series) -> String {
-        let total = series.stats?.items.first { $0.label == "Sum" }?.display ?? "0"
+        let total = series.stats?.items(format: env.series.format).first { $0.label == "Sum" }?.display ?? "0"
         let date = series.createdAt.formatted(date: .abbreviated, time: .shortened)
         return "\(series.name) · Σ \(total) · \(date)"
     }

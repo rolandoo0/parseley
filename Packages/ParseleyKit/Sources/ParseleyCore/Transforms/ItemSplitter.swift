@@ -5,7 +5,8 @@ import Foundation
 /// Rules, in order:
 /// 1. Several non-blank lines → one item per line (e.g. a spreadsheet column).
 /// 2. One line → split on the first separator that occurs: tab, comma, semicolon, pipe,
-///    then runs of spaces. Commas acting as thousands separators ("1,204") don't split.
+///    then runs of spaces. Commas inside numbers don't split: thousands in US format
+///    ("1,204"), decimals in European format ("1,5").
 /// Items are trimmed; empty items are dropped.
 public enum ItemSplitter {
     public enum Separator: Equatable, Sendable {
@@ -29,7 +30,7 @@ public enum ItemSplitter {
         public var separator: Separator
     }
 
-    public static func split(_ text: String) -> Result {
+    public static func split(_ text: String, format: NumberFormat = .us) -> Result {
         let lines = text.components(separatedBy: .newlines).map(trim).filter { !$0.isEmpty }
         if lines.count > 1 { return Result(items: lines, separator: .newline) }
         guard let line = lines.first else { return Result(items: [], separator: .newline) }
@@ -37,7 +38,7 @@ public enum ItemSplitter {
         if line.contains("\t") {
             return Result(items: clean(line.components(separatedBy: "\t")), separator: .tab)
         }
-        let commaItems = splitOnListCommas(line)
+        let commaItems = splitOnListCommas(line, format: format)
         if commaItems.count > 1 { return Result(items: clean(commaItems), separator: .comma) }
         if line.contains(";") {
             return Result(items: clean(line.components(separatedBy: ";")), separator: .semicolon)
@@ -66,14 +67,17 @@ public enum ItemSplitter {
         parts.map(trim).filter { !$0.isEmpty }
     }
 
-    /// Splits on commas, except a comma between a digit and exactly three digits
-    /// ("1,204", "1,000,000"), which is a thousands separator.
-    private static func splitOnListCommas(_ line: String) -> [String] {
+    /// Splits on commas, except commas that belong to a number: US thousands ("1,204")
+    /// or European decimals ("1,5", a comma between two digits).
+    private static func splitOnListCommas(_ line: String, format: NumberFormat) -> [String] {
         let chars = Array(line)
         var parts: [String] = []
         var current = ""
         for (i, ch) in chars.enumerated() {
-            if ch == ",", !isThousandsComma(at: i, in: chars) {
+            let partOfNumber = format == .us
+                ? isThousandsComma(at: i, in: chars)
+                : isDecimalComma(at: i, in: chars)
+            if ch == ",", !partOfNumber {
                 parts.append(current)
                 current = ""
             } else {
@@ -82,6 +86,10 @@ public enum ItemSplitter {
         }
         parts.append(current)
         return parts
+    }
+
+    private static func isDecimalComma(at i: Int, in chars: [Character]) -> Bool {
+        i > 0 && i + 1 < chars.count && chars[i - 1].isASCIIDigit && chars[i + 1].isASCIIDigit
     }
 
     private static func isThousandsComma(at i: Int, in chars: [Character]) -> Bool {

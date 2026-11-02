@@ -15,8 +15,11 @@ struct ParseleyApp: App {
     @State private var env = AppEnvironment()
 
     var body: some Scene {
-        MenuBarExtra("Parseley", systemImage: "list.clipboard") {
+        MenuBarExtra {
             MenuContent(env: env)
+        } label: {
+            // The icon follows the active mode (Finance shows $, SQL a database…).
+            Image(systemName: env.modes.current.icon)
         }
         // `.menu` renders the content as a native NSMenu (Buttons become menu items).
         .menuBarExtraStyle(.menu)

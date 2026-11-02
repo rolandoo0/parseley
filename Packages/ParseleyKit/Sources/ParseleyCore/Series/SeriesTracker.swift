@@ -31,7 +31,6 @@ public final class SeriesTracker {
 
     private let store: SeriesStore
     private let now: () -> Date
-    private let parser = NumberParser()
     /// Clips longer than this aren't scanned (keeps capture instant).
     private static let maxContentLength = 200_000
 
@@ -76,9 +75,15 @@ public final class SeriesTracker {
     // MARK: - Copies
 
     /// Feeds one copy into the active series.
-    /// - Parameter force: include it even if it mixes text and numbers (manual "add").
+    /// - Parameters:
+    ///   - force: include it even if it mixes text and numbers (manual "add").
+    ///   - format: how to read the numbers (the source app's mode decides).
     @discardableResult
-    public func ingest(content: String, clipID: Int64?, sourceBundleID: String?, force: Bool = false) -> IngestResult {
+    public func ingest(
+        content: String, clipID: Int64?, sourceBundleID: String?,
+        force: Bool = false, format: NumberFormat = .us
+    ) -> IngestResult {
+        let parser = NumberParser(format: format)
         guard var series = active else { return .ignored(.noActiveSeries) }
         guard content.utf16.count <= Self.maxContentLength else { return .ignored(.noNumbers) }
         let timestamp = now()

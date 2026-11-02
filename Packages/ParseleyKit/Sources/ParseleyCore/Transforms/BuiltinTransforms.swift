@@ -7,10 +7,11 @@ import Foundation
 public struct CommaListTransform: Transform {
     public let id = "list.comma"
     public let title = "Comma list"
-    public init() {}
+    public var format: NumberFormat
+    public init(format: NumberFormat = .us) { self.format = format }
 
     public func apply(_ input: String) throws -> String {
-        let items = ItemSplitter.split(input).items
+        let items = ItemSplitter.split(input, format: format).items
         guard !items.isEmpty else { throw TransformError.noItems }
         return items.joined(separator: ", ")
     }
@@ -20,14 +21,16 @@ public struct CommaListTransform: Transform {
 public struct SQLInTransform: Transform {
     public let id = "sql.in"
     public let title = "SQL IN"
-    public init() {}
+    public var format: NumberFormat
+    public init(format: NumberFormat = .us) { self.format = format }
 
     public func apply(_ input: String) throws -> String {
-        let items = ItemSplitter.split(input).items.map(ItemSplitter.unquote)
+        let items = ItemSplitter.split(input, format: format).items.map(ItemSplitter.unquote)
         guard !items.isEmpty else { throw TransformError.noItems }
         let values: [String]
-        if let numbers = NumericItems.values(items) {
-            values = numbers.map { NumberFormatting.plain($0, maxFractionDigits: 20) }
+        if let numbers = NumericItems.values(items, format: format) {
+            // SQL always uses "." for decimals, whatever the input format.
+            values = numbers.map { NumberFormatting.machinePlain($0, maxFractionDigits: 20) }
         } else {
             // SQL escapes a single quote by doubling it: O'Brien → 'O''Brien'
             values = items.map { "'" + $0.replacingOccurrences(of: "'", with: "''") + "'" }
@@ -40,14 +43,16 @@ public struct SQLInTransform: Transform {
 public struct JSONArrayTransform: Transform {
     public let id = "json.array"
     public let title = "JSON array"
-    public init() {}
+    public var format: NumberFormat
+    public init(format: NumberFormat = .us) { self.format = format }
 
     public func apply(_ input: String) throws -> String {
-        let items = ItemSplitter.split(input).items.map(ItemSplitter.unquote)
+        let items = ItemSplitter.split(input, format: format).items.map(ItemSplitter.unquote)
         guard !items.isEmpty else { throw TransformError.noItems }
         let values: [String]
-        if let numbers = NumericItems.values(items) {
-            values = numbers.map { NumberFormatting.plain($0, maxFractionDigits: 20) }
+        if let numbers = NumericItems.values(items, format: format) {
+            // JSON always uses "." for decimals.
+            values = numbers.map { NumberFormatting.machinePlain($0, maxFractionDigits: 20) }
         } else {
             values = items.map(Self.jsonString)
         }
@@ -79,19 +84,23 @@ public struct JSONArrayTransform: Transform {
 /// alphabetically (case-insensitive, "file2" before "file10"). Keeps the separator style.
 public struct SortTransform: Transform {
     public let ascending: Bool
+    public var format: NumberFormat
     public var id: String { ascending ? "sort.asc" : "sort.desc" }
     public var title: String { ascending ? "Sort ↑" : "Sort ↓" }
-    public init(ascending: Bool) { self.ascending = ascending }
+    public init(ascending: Bool, format: NumberFormat = .us) {
+        self.ascending = ascending
+        self.format = format
+    }
 
     public func apply(_ input: String) throws -> String {
-        let split = ItemSplitter.split(input)
+        let split = ItemSplitter.split(input, format: format)
         guard !split.items.isEmpty else { throw TransformError.noItems }
 
         // Pair each item with its position so equal items keep their original order
         // (a "stable" sort), whichever direction we sort in.
         let indexed = Array(split.items.enumerated())
         let sorted: [(offset: Int, element: String)]
-        if let numbers = NumericItems.values(split.items, allowLeadingZeros: true) {
+        if let numbers = NumericItems.values(split.items, allowLeadingZeros: true, format: format) {
             sorted = indexed.sorted { a, b in
                 let (x, y) = (numbers[a.offset], numbers[b.offset])
                 if x != y { return ascending ? x < y : x > y }
@@ -112,10 +121,11 @@ public struct SortTransform: Transform {
 public struct DedupeTransform: Transform {
     public let id = "list.dedupe"
     public let title = "Dedupe"
-    public init() {}
+    public var format: NumberFormat
+    public init(format: NumberFormat = .us) { self.format = format }
 
     public func apply(_ input: String) throws -> String {
-        let split = ItemSplitter.split(input)
+        let split = ItemSplitter.split(input, format: format)
         guard !split.items.isEmpty else { throw TransformError.noItems }
         var seen = Set<String>()
         let unique = split.items.filter { seen.insert($0).inserted }   // insert returns false if already present
@@ -159,20 +169,22 @@ public struct CleanWhitespaceTransform: Transform {
 public struct RemoveNumberFormattingTransform: Transform {
     public let id = "number.plain"
     public let title = "Plain numbers"
-    public init() {}
+    public var format: NumberFormat
+    public init(format: NumberFormat = .us) { self.format = format }
 
     public func apply(_ input: String) throws -> String {
-        let numbers = NumberParser().parse(input)
+        let numbers = NumberParser(format: format).parse(input)
         guard !numbers.isEmpty else { throw TransformError.noNumbers }
         var output = input
         // Replace from the end so earlier ranges stay valid.
         for n in numbers.reversed() {
             var plain: String
             if n.multiplier != 1 {
-                plain = NumberFormatting.plain(n.value, maxFractionDigits: 20)
+                plain = NumberFormatting.plain(n.value, maxFractionDigits: 20, format: format)
             } else {
-                // Keep the digits exactly as typed ("5.00" stays "5.00").
-                plain = (n.value < 0 ? "-" : "") + n.digits
+                // Keep the digits exactly as typed ("5.00" stays "5.00"; "5,00" in European).
+                let digits = format == .us ? n.digits : n.digits.replacingOccurrences(of: ".", with: ",")
+                plain = (n.value < 0 ? "-" : "") + digits
             }
             if n.isPercent { plain += "%" }
             output.replaceSubrange(n.range, with: plain)
@@ -186,8 +198,8 @@ enum NumericItems {
     /// Values of all items if every item is a single number, else nil.
     /// - Parameter allowLeadingZeros: false treats "00123" as text (ids, zip codes),
     ///   which matters for SQL/JSON output where 00123 would lose its zeros.
-    static func values(_ items: [String], allowLeadingZeros: Bool = false) -> [Decimal]? {
-        let parser = NumberParser()
+    static func values(_ items: [String], allowLeadingZeros: Bool = false, format: NumberFormat = .us) -> [Decimal]? {
+        let parser = NumberParser(format: format)
         var result: [Decimal] = []
         for item in items {
             guard let n = parser.parseWhole(item) else { return nil }

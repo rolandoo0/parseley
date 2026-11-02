@@ -5,9 +5,11 @@ import Foundation
 /// Detection is deliberately conservative: when unsure, `.text`. Note the stats strip
 /// doesn't depend on the kind: any clip with 2+ numbers gets stats, even prose.
 public struct TypeDetector: Sendable {
-    private let numberParser = NumberParser()
+    private let numberParser: NumberParser
 
-    public init() {}
+    public init(format: NumberFormat = .us) {
+        numberParser = NumberParser(format: format)
+    }
 
     public func detect(_ content: String) -> ClipKind {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)

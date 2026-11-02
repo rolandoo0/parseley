@@ -93,6 +93,11 @@ final class PanelController {
         keyMonitor = nil
     }
 
+    /// Number-row keys 1–6 → stat tile index. (Virtual key codes aren't in order.)
+    private static let statKeys: [Int: Int] = [
+        kVK_ANSI_1: 0, kVK_ANSI_2: 1, kVK_ANSI_3: 2, kVK_ANSI_4: 3, kVK_ANSI_5: 4, kVK_ANSI_6: 5,
+    ]
+
     /// Returns true if the key was handled (and should not reach the text field).
     private func handleKey(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
@@ -108,11 +113,14 @@ final class PanelController {
         case kVK_Return, kVK_ANSI_KeypadEnter:
             model.activate(mode: modifiers == .command ? .copyOnly : .paste)
         case kVK_Escape:
-            hide()
-        case kVK_Delete where modifiers == .command:        // ⌘⌫
+            // First Esc clears the search / leaves the command bar; the next one closes.
+            if model.query.isEmpty { hide() } else { model.query = "" }
+        case kVK_Delete where modifiers == .command && !model.isCommandMode:   // ⌘⌫
             model.deleteSelected()
-        case kVK_ANSI_P where modifiers == .command:        // ⌘P
+        case kVK_ANSI_P where modifiers == .command && !model.isCommandMode:   // ⌘P
             model.togglePin()
+        case let code where modifiers == .command && Self.statKeys.keys.contains(code):  // ⌘1–⌘6
+            model.copyStat(at: Self.statKeys[code] ?? 0)
         default:
             return false
         }

@@ -130,10 +130,17 @@ Pasting it pastes the number. Series totals are never removed by the history lim
 The welcome guide (menu bar → Welcome Guide…) has a "Watch the tour" button that plays
 `App/Resources/ParseleyTour.mp4`, a 90-second walkthrough of every feature. The video is
 generated from `scripts/tour-video/tour.html`; after changing a feature, edit the scene
-and run `node scripts/tour-video/render.js` (needs Playwright and ffmpeg). Then add the
-soundtrack with `scripts/tour-video/make_audio.py`: narration from
-`narration.json` spoken by Kokoro (open-source text-to-speech that runs offline), a quiet
-music bed and key clicks, normalized to -16 LUFS. Its docstring has the setup.
+and rebuild (needs Playwright, ffmpeg and numpy):
+
+```sh
+python3 scripts/tour-video/make_audio.py plan   # scene lengths from the voice clips
+node scripts/tour-video/render.js               # video frames
+python3 scripts/tour-video/make_audio.py mix    # narration + music + key clicks
+```
+
+The narration is in `scripts/tour-video/voice/` (one MP3 per line of `narration.json`),
+generated with Higgsfield's Seed Audio model, preset voice "Ainsley". To change a line,
+regenerate that clip with the new text and run the three steps again.
 
 ### Command bar
 

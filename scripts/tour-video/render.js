@@ -17,6 +17,21 @@ const videos = {
   sum: { src: 'sum.html', fps: 30, duration: 27, out: path.join(dir, 'sum.mp4') },
 };
 const video = videos[process.argv[2] || 'tour'];
+// timing.json (from make_audio.py plan) stretches scenes to fit the narration: video time
+// v maps back to the page's original timeline.
+const timingPath = path.join(dir, 'timing.json');
+const timing = process.argv[2] !== 'sum' && fs.existsSync(timingPath) ? JSON.parse(fs.readFileSync(timingPath, 'utf8')) : null;
+if (timing) video.duration = timing.duration;
+function contentTime(v) {
+  if (!timing) return v;
+  for (const s of timing.segments) {
+    if (v >= s.video_start && v < s.video_end) {
+      const p = (v - s.video_start) / (s.video_end - s.video_start);
+      return s.content_start + p * (s.content_end - s.content_start);
+    }
+  }
+  return timing.segments[timing.segments.length - 1].content_end - 0.001;
+}
 const out = process.argv[3] && process.argv[3] !== 'x' ? path.resolve(process.argv[3]) : video.out;
 const snapshots = process.argv[3] === 'x' ? process.argv[4] : null;
 
@@ -30,7 +45,7 @@ const snapshots = process.argv[3] === 'x' ? process.argv[4] : null;
   await page.goto('file://' + built);
   if (snapshots) {
     for (const s of snapshots.split(',')) {
-      await page.evaluate((t) => window.render(t), Number(s));
+      await page.evaluate((t) => window.render(t), contentTime(Number(s)));
       await page.screenshot({ path: path.join(require('os').tmpdir(), `parseley-snap-${s}.png`) });
     }
     await browser.close();
@@ -39,7 +54,7 @@ const snapshots = process.argv[3] === 'x' ? process.argv[4] : null;
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(video.fps), '-i', '-',
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', out]);
   for (let i = 0; i < video.fps * video.duration; i++) {
-    await page.evaluate((t) => window.render(t), i / video.fps);
+    await page.evaluate((t) => window.render(t), contentTime(i / video.fps));
     const buf = await page.screenshot({ type: 'png' });
     if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
   }

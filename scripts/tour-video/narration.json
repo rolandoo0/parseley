@@ -1,6 +1,6 @@
 {
-  "voice": "af_heart",
-  "note": "start/end = the scene window in seconds (matches tour.html). Each line is spoken from start + 0.35 s and sped up slightly if needed to finish before end.",
+  "voice": "Higgsfield Seed Audio, preset Ainsley (731b4ffe-e95e-59f4-8c00-81608936091f); clips in voice/NN.mp3",
+  "note": "start/end = the scene window in seconds (matches tour.html). Scenes stretch to fit the voice: see make_audio.py plan.",
   "lines": [
     {"start": 0.3, "end": 4.5, "text": "This is Parseley: your clipboard, with the math already done."},
     {"start": 4.5, "end": 11.5, "text": "Everything you copy is kept. Copy some numbers, open the panel, and the stats are already there."},

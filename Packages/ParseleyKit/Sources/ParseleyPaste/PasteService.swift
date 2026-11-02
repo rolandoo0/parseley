@@ -51,13 +51,19 @@ public final class PasteService {
     private static let focusDelay: TimeInterval = 0.15
     /// Extra time allowed for the target app to become active, if it wasn't already.
     private static let activationTimeout: TimeInterval = 0.6
+    /// How long to wait for the user to let go of modifier keys (after a global hotkey
+    /// like ⌃⌥⌘V) before pressing ⌘V anyway. Some apps read the physical modifier
+    /// state, so a ⌘V sent while ⌃⌥ are still down can arrive as ⌃⌥⌘V.
+    private static let modifierTimeout: TimeInterval = 1.5
 
     public init() {}
 
     /// - Parameter target: The app to paste into (the one that was frontmost when the
     ///   panel opened). If it isn't active anymore, it's activated first.
+    /// - Parameter completion: Called on the main thread right after ⌘V was posted (not
+    ///   called when the permission is missing). Use it to restore the clipboard.
     @discardableResult
-    public func paste(into target: NSRunningApplication?) -> Outcome {
+    public func paste(into target: NSRunningApplication?, completion: (() -> Void)? = nil) -> Outcome {
         guard AccessibilityPermission.isTrusted else {
             pasteLog.notice("Not pasting: Accessibility permission not granted")
             return .needsAccessibility
@@ -70,16 +76,28 @@ public final class PasteService {
             target.activate()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.focusDelay) {
-            Self.postWhenActive(target, deadline: Date().addingTimeInterval(Self.activationTimeout))
+            Self.postWhenReady(
+                target,
+                activationDeadline: Date().addingTimeInterval(Self.activationTimeout),
+                modifierDeadline: Date().addingTimeInterval(Self.modifierTimeout),
+                completion: completion
+            )
         }
         return .posted
     }
 
-    /// Waits (briefly) until the target app is frontmost, then posts ⌘V.
-    private static func postWhenActive(_ target: NSRunningApplication?, deadline: Date) {
-        if let target, !target.isActive, Date() < deadline {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                postWhenActive(target, deadline: deadline)
+    /// Waits (briefly) until the target app is frontmost and no modifier keys are held,
+    /// then posts ⌘V.
+    private static func postWhenReady(
+        _ target: NSRunningApplication?, activationDeadline: Date, modifierDeadline: Date,
+        completion: (() -> Void)?
+    ) {
+        let waitingForApp = (target.map { !$0.isActive } ?? false) && Date() < activationDeadline
+        let waitingForKeys = modifiersHeld && Date() < modifierDeadline
+        if waitingForApp || waitingForKeys {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                postWhenReady(target, activationDeadline: activationDeadline,
+                              modifierDeadline: modifierDeadline, completion: completion)
             }
             return
         }
@@ -91,6 +109,13 @@ public final class PasteService {
         }
         pasteLog.notice("Posting ⌘V. Frontmost app: \(frontmost, privacy: .public)")
         postCommandV()
+        completion?()
+    }
+
+    /// True while ⌃, ⌥, ⇧ or ⌘ is physically held down.
+    private static var modifiersHeld: Bool {
+        let flags = CGEventSource.flagsState(.combinedSessionState)
+        return !flags.intersection([.maskControl, .maskAlternate, .maskShift, .maskCommand]).isEmpty
     }
 
     private static func postCommandV() {

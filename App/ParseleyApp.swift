@@ -1,4 +1,5 @@
 import SwiftUI
+import ParseleyCore
 
 /// App entry point.
 ///
@@ -18,8 +19,14 @@ struct ParseleyApp: App {
         MenuBarExtra {
             MenuContent(env: env)
         } label: {
-            // The icon follows the active mode (Finance shows $, SQL a database…).
-            Image(systemName: env.modes.current.icon)
+            // The icon follows the active mode (Finance shows $, SQL a database…). The
+            // General mode shows Parseley's own glyph, the clipboard with a sprout
+            // (a template image, so macOS colors it for light/dark menu bars).
+            if env.modes.current.id == Mode.generalID {
+                Image("MenuBarIcon")
+            } else {
+                Image(systemName: env.modes.current.icon)
+            }
         }
         // `.menu` renders the content as a native NSMenu (Buttons become menu items).
         .menuBarExtraStyle(.menu)

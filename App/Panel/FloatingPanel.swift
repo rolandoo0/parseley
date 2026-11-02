@@ -11,8 +11,8 @@ import AppKit
 ///   aren't listed in ⌘Tab or the Window menu.
 ///
 /// The window itself is borderless and fully transparent; the rounded glass shape, blur
-/// and edge highlight are drawn by SwiftUI (CrystalBackground in Theme.swift). macOS
-/// computes the drop shadow from the drawn pixels, so the shadow follows the rounded shape.
+/// and glass rim are drawn by SwiftUI (CrystalBackground in Theme.swift). There's no
+/// system shadow: on a transparent rounded window macOS renders it as a dark outline.
 final class FloatingPanel: NSPanel {
     /// Called when the panel stops being the key window (e.g. you clicked elsewhere).
     var onResignKey: (() -> Void)?
@@ -31,7 +31,7 @@ final class FloatingPanel: NSPanel {
         // Transparent window: only what SwiftUI draws is visible.
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = false   // the system shadow shows as a dark outline; the glass rim replaces it
         // The crystal design is dark glass regardless of the system appearance.
         appearance = NSAppearance(named: .darkAqua)
         isMovableByWindowBackground = true

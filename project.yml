@@ -5,7 +5,7 @@
 name: Parseley
 
 options:
-  bundleIdPrefix: com.example          # TODO: change to your own reverse-DNS prefix
+  bundleIdPrefix: io.github.rolandoo0
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -32,6 +32,8 @@ targets:
       - path: App
         excludes:
           - "Resources/Info.plist"
+          - "Resources/AppIcon.svg"   # source artwork; the asset catalog holds the PNGs
+          - "Resources/MenuBarIcon.svg"
     dependencies:
       - package: ParseleyKit
         products:
@@ -40,29 +42,30 @@ targets:
           - ParseleyCapture
           - ParseleyPaste
       - package: KeyboardShortcuts
+    configFiles:
+      Debug: Config/Signing.xcconfig      # ad-hoc by default; see that file for your Team ID
+      Release: Config/Signing.xcconfig
     info:
       path: App/Resources/Info.plist
       properties:
         CFBundleDisplayName: Parseley
+        # Versions come from the build settings (the release workflow sets them from the tag).
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.productivity
         # Menu-bar-only app: no Dock icon, no app menu bar.
         LSUIElement: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.parseley   # TODO: change with bundleIdPrefix
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.rolandoo0.parseley
         # No App Sandbox: auto-paste (M2) posts a synthetic ⌘V, which needs the
         # Accessibility permission and doesn't work well for sandboxed apps.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
-        # Signing. Default: ad-hoc ("Sign to Run Locally"). It runs without an Apple
-        # account, but macOS forgets the Accessibility permission after every rebuild.
-        # For a stable signature (recommended from M2 on), set both lines below:
-        #   DEVELOPMENT_TEAM: "AB12CD34EF"            # your Team ID (a free personal team works)
-        #   CODE_SIGN_IDENTITY: "Apple Development"
-        # Edit here rather than in Xcode's UI: `xcodegen` overwrites UI changes.
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_IDENTITY: "-"
-        DEVELOPMENT_TEAM: ""
+        # Signing lives in Config/Signing.xcconfig (ad-hoc unless you add
+        # Config/Local.xcconfig with your Team ID). Don't set it here: settings in this
+        # file override the xcconfig.
 
 schemes:
   Parseley:

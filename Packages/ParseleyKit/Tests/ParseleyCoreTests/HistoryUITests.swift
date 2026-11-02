@@ -204,3 +204,43 @@ import ParseleyCore
         #expect(!m.contains(nil))
     }
 }
+
+@Suite struct PasteQueueTests {
+    func queue(_ texts: [String]) -> PasteQueue {
+        PasteQueue(items: texts.enumerated().map { PasteQueue.Item(clipID: Int64($0.offset), content: $0.element) })
+    }
+
+    @Test func advancesThroughItemsInOrder() {
+        var q = queue(["a", "b", "c"])
+        #expect(q.count == 3)
+        #expect(q.next?.content == "a")
+        #expect(q.advance()?.content == "a")
+        #expect(q.advance()?.content == "b")
+        #expect(q.progress == "2 of 3")
+        #expect(q.remaining == 1)
+        #expect(q.advance()?.content == "c")
+        #expect(q.isFinished)
+        #expect(q.advance() == nil)
+        #expect(q.progress == "3 of 3")
+    }
+
+    @Test func stepBackRepastes() {
+        var q = queue(["a", "b"])
+        _ = q.advance()
+        q.stepBack()
+        #expect(q.next?.content == "a")
+        q.stepBack()
+        #expect(q.position == 0)
+    }
+
+    @Test func emptyItemsAreDropped() {
+        let q = queue(["a", "", "b"])
+        #expect(q.items.map(\.content) == ["a", "b"])
+        #expect(queue([]).isFinished)
+    }
+
+    @Test func previewIsShort() {
+        let q = queue([String(repeating: "x", count: 100)])
+        #expect((q.next?.preview.count ?? 0) <= 40)
+    }
+}

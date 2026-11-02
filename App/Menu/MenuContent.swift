@@ -21,6 +21,12 @@ struct MenuContent: View {
 
         seriesSection
 
+        if let status = env.pasteQueue.status {
+            Divider()
+            Text(verbatim: "\(status) · ⌃⌥⌘V pastes the next")
+            Button("Cancel Queue") { env.pasteQueue.cancel() }
+        }
+
         Divider()
 
         if let error = env.storageError {
@@ -33,6 +39,7 @@ struct MenuContent: View {
 
         Divider()
 
+        Button("Welcome Guide…") { env.onboarding.show() }
         // Opens the SwiftUI `Settings` scene (macOS 14+).
         SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")

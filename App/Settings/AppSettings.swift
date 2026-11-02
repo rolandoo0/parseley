@@ -16,18 +16,24 @@ final class AppSettings {
     var idleGapMinutes: Int { didSet { changed() } }
     /// Ask to start a new series when numbers start coming from another app.
     var askOnAppSwitch: Bool { didSet { changed() } }
+    /// Which result "paste series result" pastes: a stat label ("Sum", "Average"…) or
+    /// `followMode` for the current mode's main stat.
+    var seriesPasteStat: String { didSet { changed() } }
 
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored private let defaults: UserDefaults
 
     static let historyLimitChoices = [100, 250, 500, 1_000, 2_500, 5_000, 10_000]
     static let idleGapChoices = [0, 5, 10, 15, 30, 60]
+    static let followMode = "mode"
+    static let seriesPasteChoices = [followMode, "Sum", "Average", "Median", "Count", "Min", "Max"]
 
     private enum Key {
         static let historyLimit = "historyLimit"
         static let excludedBundleIDs = "excludedBundleIDs"
         static let idleGapMinutes = "series.idleGapMinutes"
         static let askOnAppSwitch = "series.askOnAppSwitch"
+        static let seriesPasteStat = "series.pasteStat"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -36,6 +42,7 @@ final class AppSettings {
         excludedBundleIDs = defaults.stringArray(forKey: Key.excludedBundleIDs) ?? []
         idleGapMinutes = defaults.object(forKey: Key.idleGapMinutes) as? Int ?? 10
         askOnAppSwitch = defaults.object(forKey: Key.askOnAppSwitch) as? Bool ?? false
+        seriesPasteStat = defaults.string(forKey: Key.seriesPasteStat) ?? Self.followMode
     }
 
     var privacyPolicy: PrivacyPolicy {
@@ -54,6 +61,7 @@ final class AppSettings {
         defaults.set(excludedBundleIDs, forKey: Key.excludedBundleIDs)
         defaults.set(idleGapMinutes, forKey: Key.idleGapMinutes)
         defaults.set(askOnAppSwitch, forKey: Key.askOnAppSwitch)
+        defaults.set(seriesPasteStat, forKey: Key.seriesPasteStat)
         onChange?()
     }
 }

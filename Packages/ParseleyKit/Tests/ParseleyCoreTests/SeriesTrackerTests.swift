@@ -214,6 +214,19 @@ final class ManualClock {
         #expect(tracker.prompt == nil)
     }
 
+    @Test func onSeriesEndedReportsEveryWayASeriesEnds() {
+        var ended: [String] = []
+        tracker.onSeriesEnded = { ended.append("\($0.name):\($0.values)") }
+        tracker.start(name: "A")
+        copy("1")
+        tracker.start(name: "B")            // replaces A
+        copy("2")
+        copy("3", after: 11 * 60)
+        tracker.acceptPrompt()              // splits B
+        tracker.stop()                      // ends the split-off series
+        #expect(ended == ["A:[1]", "B:[2]", "Series 3:[3]"])
+    }
+
     @Test func onChangeFires() {
         var count = 0
         tracker.onChange = { count += 1 }

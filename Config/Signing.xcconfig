@@ -1,0 +1,18 @@
+// Code signing for local builds.
+//
+// Default: ad-hoc ("Sign to Run Locally"). Anyone can build and run Parseley this way
+// without an Apple account. Downside: macOS forgets the Accessibility permission
+// (needed for auto-paste) every time the app is rebuilt.
+//
+// For a stable signature, create Config/Local.xcconfig (git-ignored) with your own
+// Team ID; a free Apple ID works (Xcode → Settings → Accounts shows it):
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   CODE_SIGN_IDENTITY = Apple Development
+//
+// then run `xcodegen` again. Release builds are signed by the release workflow instead.
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

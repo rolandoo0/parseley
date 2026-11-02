@@ -16,7 +16,7 @@ final class SeriesBarPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = false   // the system shadow shows as a dark outline; the glass rim replaces it
         appearance = NSAppearance(named: .darkAqua)
         isMovableByWindowBackground = true   // drag it anywhere by its background
         hidesOnDeactivate = false
@@ -86,7 +86,6 @@ final class SeriesBarController {
         frame.size = NSSize(width: Self.width, height: height)
         frame.origin.y = top - height
         panel.setFrame(frame, display: true, animate: animate && panel.isVisible)
-        panel.invalidateShadow()
     }
 
     private func placeTopLeft(_ point: NSPoint) {

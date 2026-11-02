@@ -28,6 +28,10 @@ final class AppEnvironment {
     @ObservationIgnored let monitor: ClipboardMonitor
     @ObservationIgnored let settings: AppSettings
     @ObservationIgnored let modes: ModeController
+    @ObservationIgnored let recipes: RecipeController
+    @ObservationIgnored let toast: ToastController
+    @ObservationIgnored let pasteQueue: PasteQueueController
+    @ObservationIgnored let onboarding = OnboardingController()
     @ObservationIgnored let panelModel: HistoryPanelModel
     @ObservationIgnored let panelController: PanelController
     @ObservationIgnored let series: SeriesController
@@ -59,15 +63,19 @@ final class AppEnvironment {
             configuration: configuration
         )
         let modes = ModeController()
+        let recipes = RecipeController()
+        let toast = ToastController()
         let appInfo = AppInfoCache()
         let panelModel = HistoryPanelModel(store: store, monitor: monitor, modes: modes, appInfo: appInfo)
         let series = SeriesController(
             tracker: SeriesTracker(store: seriesStore, rules: settings.seriesRules),
             monitor: monitor,
+            store: store,
             appInfo: appInfo
         )
         series.modes = modes
         panelModel.series = series
+        panelModel.recipes = recipes
         // Each copy is read in the number format of the mode its source app belongs to.
         monitor.numberFormatForSource = { [weak modes] source in
             modes?.mode(forSource: source).numberFormat ?? .us
@@ -77,6 +85,9 @@ final class AppEnvironment {
         self.monitor = monitor
         self.settings = settings
         self.modes = modes
+        self.recipes = recipes
+        self.toast = toast
+        self.pasteQueue = PasteQueueController(monitor: monitor, toast: toast)
         self.panelModel = panelModel
         self.panelController = PanelController(model: panelModel)
         self.series = series
@@ -94,6 +105,8 @@ final class AppEnvironment {
                 if mode.countsInSeries {
                     self.series.ingest(result.clip, format: mode.numberFormat)
                 }
+                if case .inserted(let clip) = result { runAutoRecipe(on: clip, mode: mode) }
+                reportToTour(copied: result.clip)
             }
             refreshCounts()
             // Keep the panel live if it's open while you copy something.
@@ -103,8 +116,32 @@ final class AppEnvironment {
         refreshCounts()
 
         settings.onChange = { [weak self] in self?.applySettings() }
-        series.onActiveChanged = { [weak self] active in self?.seriesBar.setVisible(active) }
+        series.onActiveChanged = { [weak self] active in
+            self?.seriesBar.setVisible(active)
+            if active { self?.onboarding.guide.record(.startedSeries) }
+        }
+        series.announce = { [weak self] message in self?.toast.show(message, icon: "sum") }
+        series.onHistoryChanged = { [weak self] in
+            guard let self else { return }
+            onboarding.guide.record(.savedSeriesTotal)   // a finished series' total was saved
+            refreshCounts()
+            if panelController.isVisible { panelModel.reload() }
+        }
         seriesBar.setVisible(series.isActive)   // a series may have been running at quit
+
+        // The interactive welcome tour reacts to what the user actually does.
+        onboarding.series = series
+        onboarding.openPanel = { [weak self] query in
+            guard let self else { return }
+            panelController.show()
+            panelModel.query = query   // ">" opens the command bar on the selected clip
+        }
+        panelController.onShow = { [weak self] in self?.onboarding.guide.record(.openedPanel) }
+        panelModel.onStatCopied = { [weak self] in self?.onboarding.guide.record(.copiedStat) }
+        panelModel.onCommandRun = { [weak self] in self?.onboarding.guide.record(.ranCommand) }
+
+        // First launch: the welcome guide (after the run loop starts, so windows can show).
+        DispatchQueue.main.async { [weak self] in self?.onboarding.showIfNeeded() }
 
         KeyboardShortcuts.onKeyUp(for: .togglePanel) { [weak self] in
             self?.panelController.toggle()
@@ -115,12 +152,58 @@ final class AppEnvironment {
         KeyboardShortcuts.onKeyUp(for: .newSeries) { [weak self] in
             self?.series.startNew()
         }
+        panelModel.pasteQueue = pasteQueue
+        KeyboardShortcuts.onKeyUp(for: .pasteNext) { [weak self] in
+            guard let self else { return }
+            // The queue wins while it runs; otherwise this pastes the series result.
+            if self.pasteQueue.isActive {
+                self.pasteQueue.pasteNext()
+            } else {
+                self.pasteSeriesResult(emptyMessage: "Nothing to add up · copy some numbers or start a series")
+            }
+        }
+        KeyboardShortcuts.onKeyUp(for: .pasteSeriesResult) { [weak self] in
+            self?.pasteSeriesResult(emptyMessage: "Nothing to add up · copy some numbers or start a series")
+        }
         KeyboardShortcuts.onKeyUp(for: .copySeriesTotal) { [weak self] in
             self?.series.copyCurrentOrLastTotal()
         }
     }
 
     // MARK: - Actions
+
+    /// Pastes the running (or last) series' result: the stat chosen in Settings › Series,
+    /// or the current mode's main stat.
+    ///
+    /// What gets summed, first match wins:
+    /// 1. the running series;
+    /// 2. a list of numbers on the clipboard (copy a column, press the hotkey);
+    /// 3. the last finished series.
+    func pasteSeriesResult(emptyMessage: String) {
+        if let running = series.resultSeries(finished: false), let stats = running.stats {
+            return pasteStat(of: stats, describing: "series")
+        }
+        if let text = monitor.currentText, text.utf16.count <= HistoryPanelModel.maxStatsLength,
+           let stats = NumberStats(text: text, parser: NumberParser(format: modes.current.numberFormat)),
+           stats.count >= 2 {
+            return pasteStat(of: stats, describing: "\(stats.count) copied numbers")
+        }
+        if let last = series.resultSeries(finished: true), let stats = last.stats {
+            return pasteStat(of: stats, describing: last.name)
+        }
+        toast.show(emptyMessage, icon: "sum")
+    }
+
+    /// Pastes the stat chosen in Settings › Series (or the mode's main stat; the sum
+    /// if that isn't available) of `stats`.
+    private func pasteStat(of stats: NumberStats, describing source: String) {
+        let choice = settings.seriesPasteStat
+        let label = choice == AppSettings.followMode ? modes.current.primaryStat : choice
+        let items = stats.items(format: modes.current.numberFormat)
+        guard let item = items.first(where: { $0.label == label }) ?? items.first(where: { $0.label == "Sum" })
+        else { return }
+        pasteQueue.pasteOnce(item.copyText, label: "\(item.label.lowercased()) of \(source): \(item.display)")
+    }
 
     func showPanel() {
         panelController.show()
@@ -136,6 +219,35 @@ final class AppEnvironment {
         try? store.deleteAll(keepingPinned: keepingPinned)
         refreshCounts()
         panelModel.reload()
+    }
+
+    /// Tells the welcome tour about a copy (only while the tour is open: it parses text).
+    private func reportToTour(copied clip: Clip) {
+        guard onboarding.isShowing else { return }
+        if ClipDigest(content: clip.content).numbers.count >= 2 {
+            onboarding.guide.record(.copiedNumbers)
+        }
+        if (series.stats?.count ?? 0) >= 3 {
+            onboarding.guide.record(.seriesHasThreeValues)
+        }
+    }
+
+    /// A mode's automatic recipe: transform the fresh copy and put the result on the
+    /// clipboard (the original stays in history).
+    private func runAutoRecipe(on clip: Clip, mode: Mode) {
+        guard let id = mode.autoRecipeID,
+              let recipe = recipes.recipe(id: id),
+              let transform = recipe.transform(format: mode.numberFormat),
+              let output = try? transform.apply(clip.content),
+              output != clip.content
+        else { return }
+        do {
+            try monitor.copyToClipboard(newText: output, sourceBundleID: clip.sourceBundleID)
+            toast.show("Recipe “\(recipe.name)” applied · original kept in history", icon: "wand.and.stars")
+            refreshCounts()
+        } catch {
+            toast.show("Recipe “\(recipe.name)” failed", icon: "exclamationmark.triangle.fill")
+        }
     }
 
     /// Pushes changed settings into the running services.

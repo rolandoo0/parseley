@@ -1,0 +1,169 @@
+# Builds a release when you push a version tag:   git tag v0.2.0 && git push origin v0.2.0
+#
+# Produces Parseley-<version>.dmg (universal app: Apple silicon + Intel),
+# parseley-cli-<version>.zip and SHA256SUMS.txt, published as a GitHub Release. Users
+# install with scripts/install.sh (one command) or by opening the DMG.
+#
+# Signing & notarization (optional): without these repository secrets the app is ad-hoc
+# signed (opening a downloaded DMG then needs System Settings → Privacy & Security →
+# Open Anyway once; the install script avoids that). With them it is signed with your
+# Developer ID and notarized by Apple, so it opens without any warning.
+#   MACOS_CERTIFICATE_P12        base64 of your "Developer ID Application" certificate (.p12)
+#   MACOS_CERTIFICATE_PASSWORD   password of that .p12
+#   DEVELOPMENT_TEAM             your 10-character Team ID
+#   NOTARY_APPLE_ID              Apple ID email used for notarization
+#   NOTARY_PASSWORD              app-specific password for that Apple ID (appleid.apple.com)
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # Dry run (build + package, no release) whenever a PR changes this workflow.
+  pull_request:
+    paths: [".github/workflows/release.yml", "scripts/install.sh", "project.yml", "Config/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      SIGN: ${{ secrets.MACOS_CERTIFICATE_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        run: |
+          # Tags like v0.2.0 give 0.2.0; anything else (PRs, manual runs) is a dev build.
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [[ "$GITHUB_REF_NAME" =~ ^v[0-9][0-9A-Za-z.-]*$ ]]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            v="0.0.0-dev.${{ github.run_number }}"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Import signing certificate
+        if: env.SIGN == 'true'
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "ci" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "ci" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "ci" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+
+      - name: Build app
+        env:
+          TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          brew install xcodegen
+          xcodegen
+          if [ "$SIGN" = "true" ]; then
+            SIGNING=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" DEVELOPMENT_TEAM="$TEAM"
+                     "OTHER_CODE_SIGN_FLAGS=--timestamp --options runtime")
+          else
+            # Ad-hoc: Apple silicon refuses to run code with no signature at all.
+            SIGNING=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=-" DEVELOPMENT_TEAM=)
+          fi
+          # generic/platform=macOS + ONLY_ACTIVE_ARCH=NO → one universal (arm64 + x86_64) app.
+          xcodebuild -project Parseley.xcodeproj -scheme Parseley -configuration Release \
+            -destination 'generic/platform=macOS' -derivedDataPath build ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            "${SIGNING[@]}" build > xcodebuild.log 2>&1 || { grep -E "error:" xcodebuild.log; tail -n 40 xcodebuild.log; exit 1; }
+          cp -R build/Build/Products/Release/Parseley.app .
+          archs="$(lipo -archs Parseley.app/Contents/MacOS/Parseley)"
+          echo "Architectures: $archs"
+          [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || { echo "::error::App is not universal"; exit 1; }
+          v="$(defaults read "$PWD/Parseley.app/Contents/Info" CFBundleShortVersionString)"
+          [ "$v" = "${{ steps.version.outputs.version }}" ] || { echo "::error::Info.plist version is $v"; exit 1; }
+          codesign --verify --deep --strict --verbose=1 Parseley.app
+
+      - name: Build CLI
+        working-directory: Packages/ParseleyKit
+        run: |
+          swift build -c release --product parseley --arch arm64 --arch x86_64
+          cp "$(swift build -c release --product parseley --arch arm64 --arch x86_64 --show-bin-path)/parseley" "$GITHUB_WORKSPACE/parseley"
+          if [ "$SIGN" = "true" ]; then
+            codesign --force --timestamp --options runtime --sign "Developer ID Application" "$GITHUB_WORKSPACE/parseley"
+          else
+            codesign --force --sign - "$GITHUB_WORKSPACE/parseley"
+          fi
+          lipo -archs "$GITHUB_WORKSPACE/parseley"
+
+      - name: Package
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          mkdir dmg && cp -R Parseley.app dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname "Parseley $V" -srcfolder dmg -ov -format UDZO "Parseley-$V.dmg"
+          if [ "$SIGN" = "true" ]; then codesign --force --timestamp --sign "Developer ID Application" "Parseley-$V.dmg"; fi
+          ditto -c -k parseley "parseley-cli-$V.zip"
+
+      - name: Notarize
+        if: env.SIGN == 'true'
+        env:
+          APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+          TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          for f in "Parseley-$V.dmg" "parseley-cli-$V.zip"; do
+            xcrun notarytool submit "$f" --apple-id "$APPLE_ID" --password "$PASSWORD" --team-id "$TEAM" --wait
+          done
+          xcrun stapler staple "Parseley-$V.dmg"
+
+      - name: Checksums
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          shasum -a 256 "Parseley-$V.dmg" "parseley-cli-$V.zip" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # Install from the files just built, exactly as users will, and check the result.
+      - name: Test the install script
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          PARSELEY_DMG="$PWD/Parseley-$V.dmg" PARSELEY_CLI_ZIP="$PWD/parseley-cli-$V.zip" \
+          PARSELEY_APP_DIR="$RUNNER_TEMP/Applications" PARSELEY_BIN_DIR="$RUNNER_TEMP/bin" PARSELEY_NO_OPEN=1 \
+            bash scripts/install.sh
+          codesign --verify --deep --strict "$RUNNER_TEMP/Applications/Parseley.app"
+          printf '1\n2\n3.5\n' | "$RUNNER_TEMP/bin/parseley" sum
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Parseley-${{ steps.version.outputs.version }}.dmg
+            parseley-cli-${{ steps.version.outputs.version }}.zip
+            SHA256SUMS.txt
+          generate_release_notes: true
+          # Versions like 0.2.0-beta.1 are marked as pre-releases (the installer skips them).
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          body: |
+            ## Install
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash
+            ```
+
+            Or download **Parseley-${{ steps.version.outputs.version }}.dmg** below and drag Parseley to Applications.
+            See the [README](https://github.com/${{ github.repository }}#install) for details and the first-run steps.
+
+      - name: Keep build (manual runs)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: parseley-${{ steps.version.outputs.version }}
+          path: |
+            Parseley-*.dmg
+            parseley-cli-*.zip
+            SHA256SUMS.txt

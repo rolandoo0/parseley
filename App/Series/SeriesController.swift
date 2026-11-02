@@ -27,13 +27,20 @@ final class SeriesController {
     @ObservationIgnored let tracker: SeriesTracker
     @ObservationIgnored let appInfo: AppInfoCache
     @ObservationIgnored private let monitor: ClipboardMonitor
+    @ObservationIgnored private let store: ClipStore
+    /// Called after a series total was saved to history (AppEnvironment refreshes).
+    @ObservationIgnored var onHistoryChanged: (() -> Void)?
+    /// Shows a message when the bar isn't visible (set to the app's toast).
+    @ObservationIgnored var announce: ((String) -> Void)?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
 
-    init(tracker: SeriesTracker, monitor: ClipboardMonitor, appInfo: AppInfoCache) {
+    init(tracker: SeriesTracker, monitor: ClipboardMonitor, store: ClipStore, appInfo: AppInfoCache) {
         self.tracker = tracker
         self.monitor = monitor
+        self.store = store
         self.appInfo = appInfo
         tracker.onChange = { [weak self] in self?.sync() }
+        tracker.onSeriesEnded = { [weak self] series in self?.recordTotal(of: series) }
         sync()
     }
 
@@ -50,7 +57,11 @@ final class SeriesController {
 
     /// Start if nothing is running, otherwise stop.
     func toggle() {
-        tracker.isActive ? tracker.stop() : tracker.start()
+        if tracker.isActive {
+            tracker.stop()
+        } else {
+            tracker.start()
+        }
     }
 
     /// End the current series (it's saved) and start a fresh one.
@@ -112,6 +123,14 @@ final class SeriesController {
         }
     }
 
+    /// The series whose result the paste hotkeys use: the running one (if it has
+    /// numbers), or with `finished` the last finished one.
+    func resultSeries(finished: Bool) -> Series? {
+        finished
+            ? recent.first { $0.endedAt != nil && !$0.values.isEmpty }
+            : active.flatMap { $0.values.isEmpty ? nil : $0 }
+    }
+
     /// All counted values as a column, ready to paste into a spreadsheet.
     func copyValues() {
         guard let values = active?.values, !values.isEmpty else { return showToast("Nothing counted yet") }
@@ -127,10 +146,29 @@ final class SeriesController {
 
     // MARK: - Helpers
 
+    /// Saves a finished series' total into clipboard history (as a "Series total" clip
+    /// that the history limit never deletes). Pasting it pastes the plain number.
+    private func recordTotal(of series: Series) {
+        guard let stats = series.stats else { return }
+        let items = stats.items(format: format)
+        guard let sum = items.first(where: { $0.label == "Sum" }) else { return }
+        let note = "Σ \(sum.display) · \(series.name) · \(stats.count) value\(stats.count == 1 ? "" : "s")"
+        do {
+            try store.append(NewClip(
+                content: sum.copyText, kind: .seriesTotal,
+                sourceBundleID: Bundle.main.bundleIdentifier, numbers: [stats.sum], note: note
+            ))
+            onHistoryChanged?()
+        } catch {
+            showToast("Couldn't save the total: \(error.localizedDescription)")
+        }
+    }
+
     private func copyText(_ text: String, message: String) {
         do {
             try monitor.copyToClipboard(newText: text)
             showToast(message)
+            if !isActive { announce?(message) }   // no bar to show it in
         } catch {
             showToast("Couldn't copy: \(error.localizedDescription)")
         }

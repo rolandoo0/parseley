@@ -11,7 +11,16 @@ struct PanelCommand: Identifiable {
     /// Extra info shown on the right ("1,492.5", "Transform", "Mode").
     let detail: String
     let icon: String
+    /// Extra words it should be found by ("sum total" for "Copy series total").
+    var keywords: String = ""
+    /// A number (sum, average…): ⏎ pastes it, ⌘⏎ copies it, shown prominently.
+    var isValue = false
+    /// What ⌘⏎ does instead of `run` (nil = same as ⏎).
+    var copy: (() -> Void)? = nil
     let run: () -> Void
+
+    /// What the command bar matches against: the title first, then the keywords.
+    var searchText: String { keywords.isEmpty ? title : "\(title) \(keywords)" }
 }
 
 /// State and actions behind the history panel. The view (HistoryView) only renders this
@@ -34,8 +43,14 @@ final class HistoryPanelModel {
             }
         }
     }
-    private(set) var clips: [Clip] = []
-    private(set) var selection = ListSelection()
+    /// Lightweight rows (no full text): what the list shows.
+    private(set) var clips: [ClipSummary] = []
+    private(set) var selection = ListSelection() {
+        // A different clip means a different table: back to "all columns".
+        didSet { if selection.selectedID != oldValue.selectedID { selectedColumn = nil } }
+    }
+    /// For a table clip: the column the stats are about (nil = every number).
+    private(set) var selectedColumn: Int?
     /// ⌘-click / ⇧-click selection of several clips (combined stats, joint transforms).
     private(set) var multi = MultiSelection()
     private(set) var isAccessibilityTrusted = AccessibilityPermission.isTrusted
@@ -52,28 +67,39 @@ final class HistoryPanelModel {
     let modes: ModeController
     /// Set by AppEnvironment (created after this model).
     @ObservationIgnored weak var series: SeriesController?
+    @ObservationIgnored weak var recipes: RecipeController?
+    @ObservationIgnored weak var pasteQueue: PasteQueueController?
 
     var mode: Mode { modes.current }
     private var format: NumberFormat { mode.numberFormat }
 
-    /// Transform buttons in the current mode's order, reading numbers in its format.
+    /// Transform buttons in the current mode's order (reading numbers in its format),
+    /// followed by the user's recipes.
     var transforms: [any Transform] {
         TransformRegistry.ordered(pinned: mode.pinnedTransforms, format: format)
+            + (recipes?.transforms(format: format) ?? [])
     }
 
     // MARK: - Selection
 
-    var selectedClip: Clip? {
+    var selectedSummary: ClipSummary? {
         guard let id = selection.selectedID else { return nil }
         return clips.first { $0.id == id }
     }
 
-    /// The clips actions apply to: all multi-selected clips (in list order), or just the
-    /// focused one.
+    /// The focused clip with its full text, loaded on demand (and cached briefly).
+    var selectedClip: Clip? {
+        selection.selectedID.flatMap(fullClip)
+    }
+
+    /// The clips actions apply to, with full text: all multi-selected clips (in list
+    /// order), or just the focused one.
     var selectedClips: [Clip] {
-        if multi.isActive { return clips.filter { multi.contains($0.id) } }
+        if multi.isActive { return clips.filter { multi.contains($0.id) }.compactMap { fullClip($0.id) } }
         return selectedClip.map { [$0] } ?? []
     }
+
+    var multiSelectedCount: Int { multi.isActive ? multi.ids.count : 0 }
 
     // MARK: - Stats
 
@@ -82,6 +108,9 @@ final class HistoryPanelModel {
     var selectionStats: NumberStats? {
         guard mode.showsNumbers else { return nil }
         if multi.isActive { return combinedStats(of: selectedClips) }
+        if let column = selectedColumn, let table = selectedTable, table.columns.indices.contains(column) {
+            return table.columns[column].stats
+        }
         return selectedClip.flatMap { stats(for: $0) }
     }
 
@@ -90,15 +119,14 @@ final class HistoryPanelModel {
         selectionStats?.items(format: format, primary: mode.primaryStat) ?? []
     }
 
-    /// "Σ 1,492.5 · 3 values" for a list row, or nil.
-    func rowSummary(for clip: Clip) -> String? {
-        guard mode.showsNumbers, let stats = stats(for: clip),
-              let sum = stats.items(format: format).first(where: { $0.label == "Sum" })
-        else { return nil }
-        return "Σ \(sum.display)  ·  \(stats.count) values"
+    /// "Σ 1,492.5 · 3 values" for a list row, or nil. Uses the sum stored at capture
+    /// time, so rows never re-read or re-parse clip text.
+    func rowSummary(for row: ClipSummary) -> String? {
+        guard mode.showsNumbers, row.kind != .seriesTotal, row.numberCount >= 2, let sum = row.numberSum else { return nil }
+        return "Σ \(NumberFormatting.grouped(sum, maxFractionDigits: 6, format: format))  ·  \(row.numberCount) values"
     }
 
-    /// Stats for one clip with 2+ numbers. Cached per clip and format.
+    /// Stats for one clip with 2+ numbers. Cached for the most recent clips only.
     func stats(for clip: Clip) -> NumberStats? {
         guard let id = clip.id else { return nil }
         let key = "\(id)|\(format.rawValue)"
@@ -107,6 +135,7 @@ final class HistoryPanelModel {
         let stats = clip.content.utf16.count <= Self.maxStatsLength
             ? NumberStats(text: clip.content, parser: NumberParser(format: format)) : nil
         let result = (stats?.count ?? 0) >= 2 ? stats : nil
+        if statsCache.count > 16 { statsCache.removeAll() }   // small and bounded
         statsCache[key] = result   // clip content never changes, so caching is safe
         return result
     }
@@ -119,13 +148,37 @@ final class HistoryPanelModel {
         return NumberStats(values: numbers.map(\.value), inputFractionDigits: numbers.map(\.fractionDigits).max() ?? 0)
     }
 
+    // MARK: - Tables
+
+    /// The focused clip as a spreadsheet range, if it is one with numeric columns.
+    var selectedTable: ParsedTable? {
+        guard mode.showsNumbers, !multi.isActive, let row = selectedSummary, row.lineCount >= 2,
+              let clip = selectedClip else { return nil }
+        let key = "\(row.id)|\(format.rawValue)"
+        if let cached = tableCache[key] { return cached }
+        let table = clip.content.contains("\t") && clip.content.utf16.count <= Self.maxStatsLength
+            ? TableParser.parse(clip.content, format: format) : nil
+        let result = (table?.numericColumns.isEmpty ?? true) ? nil : table
+        if tableCache.count > 8 { tableCache.removeAll() }
+        tableCache[key] = result
+        return result
+    }
+
+    /// Column chip: nil = all numbers in the clip.
+    func selectColumn(_ index: Int?) {
+        selectedColumn = index
+    }
+
     // MARK: - Command bar
 
     var isCommandMode: Bool { query.hasPrefix(">") }
 
     /// Commands matching what's typed after ">", best first.
     var commands: [PanelCommand] {
-        FuzzyMatch.rank(allCommands, query: String(query.dropFirst()), key: \.title)
+        // Numbers first, so ">" alone shows the answers at the top.
+        let all = allCommands
+        let ordered = all.filter(\.isValue) + all.filter { !$0.isValue }
+        return FuzzyMatch.rank(ordered, query: String(query.dropFirst()), key: \.searchText)
     }
 
     /// What the commands will act on, for the header ("3 clips", "“$1,204.50…”").
@@ -139,6 +192,10 @@ final class HistoryPanelModel {
 
     // MARK: - Dependencies
 
+    /// Welcome-tour hooks (set by AppEnvironment).
+    @ObservationIgnored var onStatCopied: (() -> Void)?
+    @ObservationIgnored var onCommandRun: (() -> Void)?
+
     // Wired up by PanelController.
     @ObservationIgnored var closePanel: () -> Void = {}
     @ObservationIgnored var pasteTarget: () -> NSRunningApplication? = { nil }
@@ -149,8 +206,11 @@ final class HistoryPanelModel {
     @ObservationIgnored private let pasteService = PasteService()
     @ObservationIgnored private var hasPromptedForAccessibility = false
     @ObservationIgnored private var statsCache: [String: NumberStats?] = [:]
+    @ObservationIgnored private var tableCache: [String: ParsedTable?] = [:]
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var commandTargets: [Clip] = []
+    /// Full clips recently needed (selected, multi-selected). Bounded; cleared on hide.
+    @ObservationIgnored private var fullClips: [Int64: Clip] = [:]
 
     static let maxStatsLength = 200_000
 
@@ -178,9 +238,20 @@ final class HistoryPanelModel {
         focusRequest += 1
     }
 
+    /// Frees everything the panel holds while hidden: rows, full clips, caches.
+    func releaseMemory() {
+        clips = []
+        fullClips = [:]
+        statsCache = [:]
+        tableCache = [:]
+        commandTargets = []
+        multi.clear()
+    }
+
     func reload(resetSelection: Bool = false) {
+        fullClips = [:]   // pins/notes may have changed
         do {
-            clips = try store.fetch(matching: isCommandMode ? "" : query, limit: Self.fetchLimit)
+            clips = try store.summaries(matching: isCommandMode ? "" : query, limit: Self.fetchLimit)
             selection.update(ids: ids, resetToFirst: resetSelection)
             if resetSelection { multi.clear() } else { multi.prune(to: ids) }
         } catch {
@@ -202,15 +273,15 @@ final class HistoryPanelModel {
         selection.move(by: delta, in: ids)
     }
 
-    func select(_ clip: Clip) {
+    func select(_ row: ClipSummary) {
         multi.clear()
-        if let id = clip.id { selection.select(id, in: ids) }
+        selection.select(row.id, in: ids)
     }
 
     /// Mouse click on a row: plain click selects; ⌘-click toggles it in a multi-selection;
     /// ⇧-click selects the range from the focused row.
-    func click(_ clip: Clip) {
-        guard let id = clip.id else { return }
+    func click(_ row: ClipSummary) {
+        let id = row.id
         // SwiftUI tap gestures don't report modifier keys; NSEvent knows which are held now.
         let modifiers = NSEvent.modifierFlags
         if modifiers.contains(.command) {
@@ -219,7 +290,7 @@ final class HistoryPanelModel {
         } else if modifiers.contains(.shift) {
             multi.extend(to: id, from: selection.selectedID, in: ids)
         } else {
-            select(clip)
+            select(row)
         }
     }
 
@@ -227,12 +298,12 @@ final class HistoryPanelModel {
 
     /// Enter / double-click: put the clip on the clipboard, close, and paste into the app
     /// that was frontmost before the panel opened. In the command bar: run the command.
-    func activate(_ clip: Clip? = nil, mode activation: ActivationMode = .paste) {
-        if clip == nil, isCommandMode {
-            runCommand(at: commandIndex)
+    func activate(_ row: ClipSummary? = nil, mode activation: ActivationMode = .paste) {
+        if row == nil, isCommandMode {
+            runCommand(at: commandIndex, copyOnly: activation == .copyOnly)
             return
         }
-        guard let clip = clip ?? selectedClip, let id = clip.id else { return }
+        guard let id = row?.id ?? selection.selectedID else { return }
         do {
             try monitor.copyToClipboard(clipID: id)
         } catch {
@@ -254,12 +325,27 @@ final class HistoryPanelModel {
         }
     }
 
-    func runCommand(at index: Int) {
+    /// ⏎ runs the command (for a number: pastes it); ⌘⏎ copies a number instead.
+    func runCommand(at index: Int, copyOnly: Bool = false) {
         let list = commands
         guard list.indices.contains(index) else { return }
         let command = list[index]
         query = ""            // leave the command bar first…
-        command.run()         // …so the command's own selection/toast stick
+        if copyOnly, let copy = command.copy { copy() } else { command.run() }   // …so its toast sticks
+        onCommandRun?()
+    }
+
+    /// Command bar ⏎ on a number: close the panel and paste it into the app you were in.
+    /// The value is not added to history (or counted in a running series).
+    func pasteValue(_ item: NumberStats.Item) {
+        monitor.writeWithoutRecording(item.copyText)
+        let target = pasteTarget()
+        closePanel()
+        if pasteService.paste(into: target) == .needsAccessibility, !hasPromptedForAccessibility {
+            // It's on the clipboard; ⌘V works. Explain the permission once per launch.
+            hasPromptedForAccessibility = true
+            AccessibilityPermission.requestWithSystemPrompt()
+        }
     }
 
     /// Click on a stat tile: copy its value (it also lands in history). The panel stays
@@ -269,6 +355,7 @@ final class HistoryPanelModel {
             try monitor.copyToClipboard(newText: item.copyText)
             reload()
             showToast("Copied \(item.label.lowercased()): \(item.display)")
+            onStatCopied?()
         } catch {
             errorMessage = "Couldn't copy: \(error.localizedDescription)"
         }
@@ -309,6 +396,18 @@ final class HistoryPanelModel {
         }
     }
 
+    /// "Queue" chip: paste the selected clips one by one with ⌃⌥⌘V. Closes the panel so
+    /// you can click into the target field.
+    func queueSelection() {
+        startQueue(with: selectedClips)
+    }
+
+    private func startQueue(with clips: [Clip]) {
+        guard !clips.isEmpty, let pasteQueue else { return }
+        pasteQueue.start(with: clips)
+        closePanel()
+    }
+
     /// "Add to series" chip: every selected clip, included even if it mixes text.
     func addSelectionToSeries() {
         addToSeries(selectedClips)
@@ -320,18 +419,17 @@ final class HistoryPanelModel {
         showToast("Added to \(series.active?.name ?? "series")")
     }
 
-    func togglePin(_ clip: Clip? = nil) {
-        guard let clip = clip ?? selectedClip, let id = clip.id else { return }
-        perform { try store.setPinned(id: id, !clip.isPinned) }
+    func togglePin(_ row: ClipSummary? = nil) {
+        guard let row = row ?? selectedSummary else { return }
+        perform { try store.setPinned(id: row.id, !row.isPinned) }
     }
 
-    func delete(_ clip: Clip) {
-        guard let id = clip.id else { return }
-        perform { try store.delete(id: id) }
+    func delete(_ row: ClipSummary) {
+        perform { try store.delete(id: row.id) }
     }
 
     func deleteSelected() {
-        if let clip = selectedClip { delete(clip) }
+        if let row = selectedSummary { delete(row) }
     }
 
     func enableAutoPaste() {
@@ -351,39 +449,72 @@ final class HistoryPanelModel {
         // Transforms, in the mode's order.
         for transform in transforms {
             list.append(PanelCommand(
-                id: "transform.\(transform.id)", title: transform.title, detail: "Transform",
+                id: "transform.\(transform.id)", title: transform.title,
+                detail: transform.id.hasPrefix("recipe.") ? "Recipe" : "Transform",
                 icon: Theme.icon(forTransformID: transform.id)
             ) { [weak self] in self?.applyTransform(transform, to: targets) })
         }
 
-        // Stats of the targets.
-        if mode.showsNumbers, let stats = combinedStats(of: targets), stats.count >= 2 {
-            for item in stats.items(format: format, primary: mode.primaryStat) {
+        // Stats of the targets: as soon as there's one number (the sum of "30" is 30).
+        // Shown in every mode: typing >sum is an explicit ask.
+        if let stats = combinedStats(of: targets) {
+            let keywords = ["Sum": "total add Σ", "Average": "mean avg", "Count": "how many number",
+                            "Median": "middle", "Min": "minimum lowest smallest", "Max": "maximum highest largest"]
+            // With a single number only "sum" means anything (count 1, min = max = it).
+            let items = stats.items(format: format, primary: mode.primaryStat)
+                .filter { stats.count >= 2 || $0.label == "Sum" }
+            for item in items {
                 list.append(PanelCommand(
-                    id: "stat.\(item.label)", title: "Copy \(item.label.lowercased())", detail: item.display,
-                    icon: "number"
-                ) { [weak self] in self?.copyStat(item) })
+                    id: "stat.\(item.label)", title: item.label, detail: item.display,
+                    icon: item.label == "Sum" ? "sum" : "number",
+                    keywords: "\(keywords[item.label] ?? "") paste copy", isValue: true,
+                    copy: { [weak self] in self?.copyStat(item) }
+                ) { [weak self] in self?.pasteValue(item) })
             }
+        }
+
+        // Columns of a copied spreadsheet range.
+        if targets.count == 1, let target = targets.first,
+           target.content.contains("\t"), target.content.utf16.count <= Self.maxStatsLength,
+           let table = TableParser.parse(target.content, format: format) {
+            for column in table.numericColumns {
+                guard let sum = column.stats?.items(format: format).first(where: { $0.label == "Sum" }) else { continue }
+                list.append(PanelCommand(
+                    id: "column.\(column.index)", title: "Sum of \(column.name)", detail: sum.display, icon: "tablecells",
+                    keywords: "total column paste copy", isValue: true,
+                    copy: { [weak self] in self?.copyStat(sum) }
+                ) { [weak self] in self?.pasteValue(sum) })
+            }
+        }
+
+        // Paste queue.
+        if targets.count >= 2 {
+            list.append(PanelCommand(id: "queue.start", title: "Paste queue", detail: "\(targets.count) clips · ⌃⌥⌘V",
+                                     icon: "list.number") { [weak self] in self?.startQueue(with: targets) })
         }
 
         // Series.
         if !targets.isEmpty {
-            list.append(PanelCommand(id: "series.add", title: "Add to series", detail: "Series", icon: "sum") {
+            list.append(PanelCommand(id: "series.add", title: "Add to series", detail: "Series", icon: "sum",
+                                     keywords: "sum tally running total") {
                 [weak self] in self?.addToSeries(targets)
             })
         }
         if let series {
             if series.isActive {
                 list.append(PanelCommand(id: "series.copy", title: "Copy series total",
-                                         detail: series.sumItem?.display ?? "", icon: "sum") { series.copySum() })
-                list.append(PanelCommand(id: "series.new", title: "New series", detail: "Series", icon: "plus") {
+                                         detail: series.sumItem?.display ?? "", icon: "sum", keywords: "sum tally") { series.copySum() })
+                list.append(PanelCommand(id: "series.new", title: "New series", detail: "Series", icon: "plus",
+                                         keywords: "tally reset start") {
                     series.startNew()
                 })
-                list.append(PanelCommand(id: "series.stop", title: "Stop series", detail: "Series", icon: "stop.fill") {
+                list.append(PanelCommand(id: "series.stop", title: "Stop series", detail: "Series", icon: "stop.fill",
+                                         keywords: "tally end finish save total") {
                     series.stop()
                 })
             } else {
-                list.append(PanelCommand(id: "series.start", title: "Start series", detail: "Series", icon: "play.fill") {
+                list.append(PanelCommand(id: "series.start", title: "Start series", detail: "Series", icon: "play.fill",
+                                         keywords: "tally running total sum") {
                     series.toggle()
                 })
             }
@@ -392,7 +523,9 @@ final class HistoryPanelModel {
         // Pin.
         if targets.count == 1, let clip = targets.first {
             list.append(PanelCommand(id: "clip.pin", title: clip.isPinned ? "Unpin" : "Pin", detail: "Clip", icon: "pin") {
-                [weak self] in self?.togglePin(clip)
+                [weak self] in
+                guard let self, let row = self.clips.first(where: { $0.id == clip.id }) else { return }
+                self.togglePin(row)
             })
         }
 
@@ -411,7 +544,16 @@ final class HistoryPanelModel {
 
     // MARK: - Helpers
 
-    private var ids: [Int64] { clips.compactMap(\.id) }
+    private var ids: [Int64] { clips.map(\.id) }
+
+    /// Full text for a clip, from a small cache or the database.
+    private func fullClip(_ id: Int64) -> Clip? {
+        if let cached = fullClips[id] { return cached }
+        guard let clip = try? store.clip(id: id) else { return nil }
+        if fullClips.count >= 32 { fullClips.removeAll() }
+        fullClips[id] = clip
+        return clip
+    }
 
     private func showToast(_ message: String) {
         toast = message

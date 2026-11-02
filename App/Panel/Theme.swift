@@ -12,10 +12,15 @@ enum Theme {
     static let amber = Color(red: 1.00, green: 0.77, blue: 0.36)
     static let rose = Color(red: 1.00, green: 0.46, blue: 0.56)
 
-    // Text on glass
+    // Text on glass. Checked for WCAG contrast over the glass on both a black and a
+    // white wallpaper (with the dark base layer in CrystalBackground):
+    // primary ≥ 11:1, secondary ≥ 8:1, tertiary ≥ 5.5:1, cyan ≥ 9:1, violet ≥ 4.9:1.
+    // Numbers are always drawn in solid colors, never gradients.
     static let textPrimary = Color.white.opacity(0.93)
-    static let textSecondary = Color.white.opacity(0.60)
-    static let textTertiary = Color.white.opacity(0.38)
+    static let textSecondary = Color.white.opacity(0.74)
+    static let textTertiary = Color.white.opacity(0.58)
+    /// The figure that matters most (Sum tile, series total): pure white.
+    static let numberEmphasis = Color.white
 
     // Glass surfaces
     static let glassFill = Color.white.opacity(0.055)
@@ -30,8 +35,13 @@ enum Theme {
     )
     /// Bright top-left edge fading out toward the bottom-right: light catching the glass.
     static let edgeGradient = LinearGradient(
-        colors: [.white.opacity(0.55), .white.opacity(0.08), cyan.opacity(0.28)],
+        colors: [.white.opacity(0.75), .white.opacity(0.32), cyan.opacity(0.55)],
         startPoint: .topLeading, endPoint: .bottomTrailing
+    )
+    /// Faint inner rim just inside the edge: the thickness of the glass.
+    static let innerRim = LinearGradient(
+        colors: [.white.opacity(0.22), .white.opacity(0.06), .white.opacity(0.14)],
+        startPoint: .top, endPoint: .bottom
     )
     /// A thin glowing line used as a section divider.
     static let glowLine = LinearGradient(
@@ -47,6 +57,7 @@ enum Theme {
     static func color(for kind: ClipKind) -> Color {
         switch kind {
         case .number, .numberList: cyan
+        case .seriesTotal: mint
         case .table: mint
         case .json: amber
         case .url, .email: violet
@@ -102,6 +113,9 @@ struct CrystalBackground: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
             VisualEffectBackground()
+            // Dark base: keeps text readable even over a white wallpaper, where the
+            // blurred light would otherwise wash out the glass.
+            Color(red: 10 / 255, green: 14 / 255, blue: 26 / 255).opacity(0.55)
             LinearGradient(
                 colors: [Theme.cyan.opacity(0.10), .clear, Theme.violet.opacity(0.14)],
                 startPoint: .topLeading, endPoint: .bottomTrailing
@@ -112,7 +126,10 @@ struct CrystalBackground: View {
             )
         }
         .clipShape(shape)
-        .overlay(shape.strokeBorder(Theme.edgeGradient, lineWidth: 1))
+        // A glass rim instead of a dark outline: bright outer edge + soft inner highlight.
+        // (The windows have no system shadow; macOS draws that as a dark rim.)
+        .overlay(shape.strokeBorder(Theme.edgeGradient, lineWidth: 1.25))
+        .overlay(shape.inset(by: 1.25).strokeBorder(Theme.innerRim, lineWidth: 1))
     }
 }
 
@@ -137,6 +154,23 @@ struct GlassCard: ViewModifier {
 extension View {
     func glassCard(radius: CGFloat = Theme.tileRadius, highlighted: Bool = false) -> some View {
         modifier(GlassCard(radius: radius, highlighted: highlighted))
+    }
+}
+
+/// Parseley's logo (the app icon artwork, from the asset catalog). Uses its own image
+/// asset rather than the app's icon, which macOS caches and can show stale.
+struct ParseleyLogo: View {
+    var size: CGFloat = 32
+
+    var body: some View {
+        Image("AppLogo")
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            // The artwork has Apple's icon margin; scale it so the squircle fills `size`.
+            .frame(width: size * 1024 / 824, height: size * 1024 / 824)
+            .frame(width: size, height: size)
+            .accessibilityLabel("Parseley")
     }
 }
 

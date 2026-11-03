@@ -176,7 +176,8 @@ shows where the error is (line and column). Everything runs locally.
 
 ### Tour video
 
-The welcome guide (menu bar → Welcome Guide…) has a "Watch the tour" button that plays
+The welcome guide (menu bar → Welcome Guide…) has a "Watch the tour" button (also menu
+bar → Watch the Tour Video) that plays
 `App/Resources/ParseleyTour.mp4`, a 90-second walkthrough of every feature. The video is
 generated from `scripts/tour-video/tour.html`; after changing a feature, edit the scene
 and rebuild (needs Playwright, ffmpeg and numpy):

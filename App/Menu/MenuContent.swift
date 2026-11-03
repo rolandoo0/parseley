@@ -41,6 +41,7 @@ struct MenuContent: View {
         Divider()
 
         Button("Welcome Guide…") { env.onboarding.show() }
+        Button("Watch the Tour Video") { TourVideoController.shared.show() }
         // Opens the SwiftUI `Settings` scene (macOS 14+).
         SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")

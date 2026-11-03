@@ -1,4 +1,3 @@
-import AVKit
 import AppKit
 import Combine
 import KeyboardShortcuts
@@ -108,13 +107,12 @@ private struct GuideView: View {
     let onFinish: () -> Void
 
     @State private var trusted = AccessibilityPermission.isTrusted
-    @State private var showingVideo = false
     /// macOS doesn't announce permission changes, so poll while the window is open.
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 0) {
-            StepList(guide: guide, watchVideo: { showingVideo = true })
+            StepList(guide: guide, watchVideo: { TourVideoController.shared.show() })
                 .frame(width: 236)
             Rectangle().fill(Theme.hairline).frame(width: 1)
             Group {
@@ -131,13 +129,6 @@ private struct GuideView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 780, height: 540)
-        .overlay {
-            if showingVideo {
-                TourVideoOverlay { showingVideo = false }
-                    .transition(.opacity)
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: showingVideo)
         .background(CrystalBackground(cornerRadius: 0))
         .environment(\.colorScheme, .dark)
         .animation(.easeInOut(duration: 0.3), value: guide.tour.current)
@@ -175,7 +166,7 @@ private struct StepList: View {
             ProgressBar(fraction: Double(guide.tour.doneCount) / Double(guide.tour.total))
                 .padding(.bottom, 12)
 
-            if TourVideoOverlay.videoURL != nil {
+            if TourVideoController.videoURL != nil {
                 Button(action: watchVideo) {
                     HStack(spacing: 8) {
                         Image(systemName: "play.circle.fill")
@@ -622,49 +613,5 @@ private struct TourButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-    }
-}
-
-// MARK: Tour video
-
-/// The feature tour video (Resources/ParseleyTour.mp4), played over the guide.
-private struct TourVideoOverlay: View {
-    let onClose: () -> Void
-    @State private var player: AVPlayer?
-
-    static var videoURL: URL? { Bundle.main.url(forResource: "ParseleyTour", withExtension: "mp4") }
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.82)
-                .onTapGesture(perform: onClose)
-            VStack(spacing: 12) {
-                if let player {
-                    // AVKit's SwiftUI player: play/pause, scrubbing and full screen built in.
-                    VideoPlayer(player: player)
-                        .frame(width: 720, height: 405)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                HStack {
-                    Text("Space plays and pauses · the steps on the left let you try each feature")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textTertiary)
-                    Spacer()
-                    Button("Close", action: onClose)
-                        .keyboardShortcut(.cancelAction)
-                }
-                .frame(width: 720)
-            }
-        }
-        .onAppear {
-            guard let url = Self.videoURL else { return }
-            let player = AVPlayer(url: url)
-            self.player = player
-            player.play()
-        }
-        .onDisappear {
-            player?.pause()
-            player = nil   // release the decoder while the guide stays open
-        }
     }
 }

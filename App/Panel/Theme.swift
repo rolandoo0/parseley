@@ -49,7 +49,7 @@ enum Theme {
         startPoint: .leading, endPoint: .trailing
     )
 
-    static let panelSize = CGSize(width: 640, height: 600)
+    static let panelSize = CGSize(width: 720, height: 620)
     static let panelRadius: CGFloat = 22
     static let tileRadius: CGFloat = 12
     static let rowRadius: CGFloat = 10

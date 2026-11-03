@@ -468,30 +468,32 @@ struct StatTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Text(verbatim: item.label.uppercased())
-                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
-                        .tracking(1.1)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .tracking(0.8)
                         // The main stat is marked by a cyan label and border, not by
                         // coloring the number (gradients make digits hard to read).
                         .foregroundStyle(emphasized ? Theme.cyan : Theme.textTertiary)
                     if let shortcut {
                         Spacer(minLength: 0)
                         Text(verbatim: shortcut)
-                            .font(.system(size: 8, weight: .medium, design: .rounded))
+                            .font(.system(size: 9.5, weight: .medium, design: .rounded))
                             .foregroundStyle(Theme.textTertiary)
                     }
                 }
+                // Rounded font with equal-width digits: easy to read, and narrower than a
+                // monospaced font, so more digits fit before anything has to shrink.
                 Text(verbatim: item.display)
-                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .font(.system(size: 19, weight: .semibold, design: .rounded).monospacedDigit())
                     .foregroundStyle(emphasized ? Theme.numberEmphasis : Theme.textPrimary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.5)   // shrink long numbers instead of truncating
+                    .minimumScaleFactor(0.65)   // only very long numbers shrink, and not by much
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 8)
             .glassCard(radius: Theme.tileRadius, highlighted: hovering || emphasized)
             .shadow(color: hovering ? Theme.cyan.opacity(0.35) : .clear, radius: 8)
             .contentShape(Rectangle())

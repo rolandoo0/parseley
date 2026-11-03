@@ -43,6 +43,12 @@ public struct JSONGraph: Sendable {
     /// CoreGraphics-free rectangle so the core stays portable (and testable on Linux).
     public struct Rect: Equatable, Sendable {
         public var x, y, width, height: Double
+        public init(x: Double, y: Double, width: Double, height: Double) {
+            self.x = x
+            self.y = y
+            self.width = width
+            self.height = height
+        }
         public static let zero = Rect(x: 0, y: 0, width: 0, height: 0)
         public var maxX: Double { x + width }
         public var maxY: Double { y + height }

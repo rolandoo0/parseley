@@ -127,20 +127,22 @@ final class JSONGraphModel {
     func fit() {
         guard let size = graph?.size, size.width > 0, viewSize.width > 0 else { return }
         let margin = 40.0
-        let scale = min((viewSize.width - margin * 2) / size.width, (viewSize.height - margin * 2) / size.height)
+        let viewWidth = Double(viewSize.width), viewHeight = Double(viewSize.height)
+        let scale = min((viewWidth - margin * 2) / size.width, (viewHeight - margin * 2) / size.height)
         zoom = min(1, max(Self.minZoom, scale))
-        offset = CGSize(width: (viewSize.width - size.width * zoom) / 2,
-                        height: max(margin, (viewSize.height - size.height * zoom) / 2))
+        offset = CGSize(width: (viewWidth - size.width * zoom) / 2,
+                        height: max(margin, (viewHeight - size.height * zoom) / 2))
     }
 
     /// Zooms keeping the content point under `anchor` (a view point) in place.
     func zoom(by factor: Double, anchor: CGPoint? = nil) {
         let anchor = anchor ?? CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
         let newZoom = min(Self.maxZoom, max(Self.minZoom, zoom * factor))
-        let contentX = (anchor.x - offset.width) / zoom
-        let contentY = (anchor.y - offset.height) / zoom
+        let ax = Double(anchor.x), ay = Double(anchor.y)
+        let contentX = (ax - Double(offset.width)) / zoom
+        let contentY = (ay - Double(offset.height)) / zoom
         zoom = newZoom
-        offset = CGSize(width: anchor.x - contentX * newZoom, height: anchor.y - contentY * newZoom)
+        offset = CGSize(width: ax - contentX * newZoom, height: ay - contentY * newZoom)
     }
 
     func pan(by delta: CGSize) {
@@ -150,8 +152,8 @@ final class JSONGraphModel {
     /// The card at a view point, and whether the point is on its collapse toggle.
     func hit(at point: CGPoint) -> (id: Int, onToggle: Bool)? {
         guard let graph else { return nil }
-        let x = (point.x - offset.width) / zoom
-        let y = (point.y - offset.height) / zoom
+        let x = (Double(point.x) - Double(offset.width)) / zoom
+        let y = (Double(point.y) - Double(offset.height)) / zoom
         for node in graph.nodes.reversed() {
             let f = node.frame
             if node.childCount > 0 {
@@ -184,8 +186,9 @@ final class JSONGraphModel {
         guard let node = graph?.nodes.first(where: { $0.id == id }) else { return }
         selectedPath = node.path
         if zoom < 0.6 { zoom = 0.9 }
-        offset = CGSize(width: viewSize.width / 2 - (node.frame.x + node.frame.width / 2) * zoom,
-                        height: viewSize.height / 2 - node.frame.midY * zoom)
+        let centerX = Double(viewSize.width) / 2, centerY = Double(viewSize.height) / 2
+        offset = CGSize(width: centerX - (node.frame.x + node.frame.width / 2) * zoom,
+                        height: centerY - node.frame.midY * zoom)
     }
 
     private func show(_ message: String) {

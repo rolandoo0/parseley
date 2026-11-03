@@ -198,8 +198,8 @@ private struct GraphCanvas: View {
         guard let graph = model.graph else { return }
         let zoom = model.zoom
         let offset = model.offset
-        let visible = JSONGraph.Rect(x: -offset.width / zoom, y: -offset.height / zoom,
-                                     width: size.width / zoom, height: size.height / zoom)
+        let visible = JSONGraph.Rect(x: -Double(offset.width) / zoom, y: -Double(offset.height) / zoom,
+                                     width: Double(size.width) / zoom, height: Double(size.height) / zoom)
         let matches = Set(model.matches)
         let selected = model.selectedPath
         let detailed = zoom >= 0.35   // below this, cards are drawn without text (fast and readable)
@@ -294,7 +294,7 @@ private struct GraphCanvas: View {
 
     /// A faint dot grid that moves with the canvas, so panning feels anchored.
     private func drawDots(in context: inout GraphicsContext, size: CGSize) {
-        let spacing = 28 * model.zoom
+        let spacing = CGFloat(28 * model.zoom)
         guard spacing >= 8 else { return }
         let startX = model.offset.width.truncatingRemainder(dividingBy: spacing)
         let startY = model.offset.height.truncatingRemainder(dividingBy: spacing)

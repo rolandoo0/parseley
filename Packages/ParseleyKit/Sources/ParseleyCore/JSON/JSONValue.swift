@@ -44,6 +44,12 @@ public struct JSONParseError: Error, Equatable, CustomStringConvertible, Sendabl
     public let line: Int
     public let column: Int
 
+    public init(message: String, line: Int, column: Int) {
+        self.message = message
+        self.line = line
+        self.column = column
+    }
+
     public var description: String { "\(message) (line \(line), column \(column))" }
 }
 

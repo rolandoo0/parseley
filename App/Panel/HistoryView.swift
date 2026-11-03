@@ -26,7 +26,9 @@ struct HistoryView: View {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 6)
             }
-            if model.isCommandMode {
+            if let pending = model.pendingSnippet {
+                SnippetForm(model: model, pending: pending)
+            } else if model.isCommandMode {
                 commandList
             } else {
                 clipList
@@ -130,6 +132,8 @@ struct HistoryView: View {
                         .onTapGesture(count: 2) { model.activate(clip) }
                         .onTapGesture { model.click(clip) }   // ⌘/⇧-click multi-select
                         .contextMenu { contextMenu(for: clip) }
+                        // Drag a clip into any app to drop its text there.
+                        .onDrag { model.dragProvider(for: clip) }
                     }
                 }
                 .padding(.horizontal, 10)
@@ -227,9 +231,14 @@ struct HistoryView: View {
                 StatsStripView(items: model.statItems) { model.copyStat($0) }
                     // Fade/slide in when moving onto a clip that has numbers.
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
+                InsightsBar(model: model)
             }
 
             HStack(spacing: 6) {
+                if model.canOpenTable {
+                    TransformChip(title: "Table", icon: "tablecells") { model.openTableSelection() }
+                        .help("Open as a sortable, filterable table (⌘T)")
+                }
                 if model.canVisualizeJSON {
                     TransformChip(title: "Visualize", icon: "point.3.connected.trianglepath.dotted") { model.visualizeSelection() }
                         .help("Open this JSON as a graph (⌘J)")
@@ -732,5 +741,172 @@ private struct NoCommandHint: View {
         .multilineTextAlignment(.center)
         .padding(.horizontal, 20)
         .padding(.top, 18)
+    }
+}
+
+// MARK: - Insights (sparkline, outliers, gaps, units)
+
+/// Under the stat tiles: a sparkline of the numbers (outliers in red), and notes about
+/// outliers, gaps in a sequence and mixed units. Click a note to copy what it lists.
+struct InsightsBar: View {
+    let model: HistoryPanelModel
+
+    var body: some View {
+        let values = model.sparklineValues
+        let insights = model.insights
+        let units = model.unitSummary
+        if !values.isEmpty || insights != nil || units != nil {
+            HStack(alignment: .center, spacing: 12) {
+                if !values.isEmpty {
+                    Sparkline(values: values, highlighted: Set(insights?.outlierIndices ?? []))
+                        .frame(width: 150, height: 30)
+                        .help("\(values.count) numbers in order")
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    if let units {
+                        note(icon: "exclamationmark.triangle.fill", color: Theme.amber,
+                             text: "Mixed units: \(units.sums)" + (units.converted.map { "  ≈ \($0)" } ?? "")) {
+                            model.copyResult(units.converted ?? units.sums, message: "Copied \(units.converted ?? units.sums)")
+                        }
+                    }
+                    if let insights, !insights.outliers.isEmpty {
+                        note(icon: "exclamationmark.circle.fill", color: Theme.rose,
+                             text: "\(insights.outliers.count) outlier\(insights.outliers.count == 1 ? "" : "s"): "
+                                + insights.outliers.prefix(4).map(model.formatNumber).joined(separator: " · ")) {
+                            model.copyResult(insights.outliers.map(model.formatNumber).joined(separator: "\n"), message: "Copied outliers")
+                        }
+                    }
+                    if let insights, !insights.gaps.isEmpty {
+                        note(icon: "number.square.fill", color: Theme.violet,
+                             text: "Missing from the sequence: " + insights.gaps.prefix(6).map(model.formatNumber).joined(separator: ", ")
+                                + (insights.gaps.count > 6 ? " +\(insights.gaps.count - 6)" : "")) {
+                            model.copyResult(insights.gaps.map(model.formatNumber).joined(separator: "\n"), message: "Copied missing numbers")
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .transition(.opacity)
+        }
+    }
+
+    private func note(icon: String, color: Color, text: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).foregroundStyle(color)
+                Text(verbatim: text)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+        }
+        .buttonStyle(.plain)
+        .help("Click to copy")
+    }
+}
+
+/// A tiny line chart of values in order; highlighted points (outliers) get red dots.
+struct Sparkline: View {
+    let values: [Double]
+    var highlighted: Set<Int> = []
+
+    var body: some View {
+        Canvas { context, size in
+            guard values.count >= 2, let low = values.min(), let high = values.max() else { return }
+            let span = high - low == 0 ? 1 : high - low
+            func point(_ i: Int) -> CGPoint {
+                CGPoint(x: size.width * Double(i) / Double(values.count - 1),
+                        y: size.height - 3 - (values[i] - low) / span * (size.height - 6))
+            }
+            var line = Path()
+            line.move(to: point(0))
+            for i in 1..<values.count { line.addLine(to: point(i)) }
+            var fill = line
+            fill.addLine(to: CGPoint(x: size.width, y: size.height))
+            fill.addLine(to: CGPoint(x: 0, y: size.height))
+            fill.closeSubpath()
+            context.fill(fill, with: .linearGradient(Gradient(colors: [Theme.cyan.opacity(0.25), .clear]),
+                                                     startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+            context.stroke(line, with: .color(Theme.cyan), lineWidth: 1.4)
+            for i in highlighted where i < values.count {
+                let p = point(i)
+                context.fill(Path(ellipseIn: CGRect(x: p.x - 2.5, y: p.y - 2.5, width: 5, height: 5)), with: .color(Theme.rose))
+            }
+        }
+        .accessibilityLabel("Sparkline of \(values.count) numbers")
+    }
+}
+
+// MARK: - Snippet form
+
+/// Fills in a snippet's fields before pasting it. ↩ pastes, ⌘↩ copies, esc cancels.
+struct SnippetForm: View {
+    @Bindable var model: HistoryPanelModel
+    let pending: HistoryPanelModel.PendingSnippet
+    @FocusState private var focused: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "text.badge.plus").foregroundStyle(Theme.accentGradient)
+                Text(verbatim: pending.snippet.name)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer()
+                Button("Cancel") { model.cancelSnippet() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            ForEach(pending.snippet.fields, id: \.self) { field in
+                HStack(spacing: 10) {
+                    Text(verbatim: field)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Theme.cyan)
+                        .frame(width: 110, alignment: .trailing)
+                    TextField("", text: Binding(
+                        get: { model.snippetValues[field] ?? "" },
+                        set: { model.snippetValues[field] = $0 }
+                    ))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .glassCard(radius: 8)
+                    .focused($focused, equals: field)
+                    .onSubmit { model.submitSnippet() }
+                }
+            }
+            Text("PREVIEW")
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .tracking(1)
+                .foregroundStyle(Theme.textTertiary)
+            ScrollView {
+                Text(verbatim: preview)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(10)
+            }
+            .glassCard(radius: 10)
+            HStack(spacing: 14) {
+                hint("⏎", "Paste"); hint("⌘⏎", "Copy"); hint("⇥", "Next field"); hint("esc", "Cancel")
+            }
+        }
+        .padding(18)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear { focused = pending.snippet.fields.first }
+    }
+
+    private var preview: String {
+        (try? pending.snippet.render(clipboard: pending.clipboard, values: model.snippetValues)) ?? "…"
+    }
+
+    private func hint(_ key: String, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            KeyCap(key: key)
+            Text(label).font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
+        }
     }
 }

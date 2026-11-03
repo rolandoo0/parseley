@@ -19,6 +19,10 @@ final class AppSettings {
     /// Which result "paste series result" pastes: a stat label ("Sum", "Average"…) or
     /// `followMode` for the current mode's main stat.
     var seriesPasteStat: String { didSet { changed() } }
+    /// Currency totals are converted to this one ("USD").
+    var baseCurrency: String { didSet { changed() } }
+    /// Manual exchange rates: 1 unit of the key currency = value × base currency, as typed.
+    var exchangeRates: [String: String] { didSet { changed() } }
 
     @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored private let defaults: UserDefaults
@@ -34,6 +38,8 @@ final class AppSettings {
         static let idleGapMinutes = "series.idleGapMinutes"
         static let askOnAppSwitch = "series.askOnAppSwitch"
         static let seriesPasteStat = "series.pasteStat"
+        static let baseCurrency = "currency.base"
+        static let exchangeRates = "currency.rates"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -43,6 +49,17 @@ final class AppSettings {
         idleGapMinutes = defaults.object(forKey: Key.idleGapMinutes) as? Int ?? 10
         askOnAppSwitch = defaults.object(forKey: Key.askOnAppSwitch) as? Bool ?? false
         seriesPasteStat = defaults.string(forKey: Key.seriesPasteStat) ?? Self.followMode
+        baseCurrency = defaults.string(forKey: Key.baseCurrency) ?? "USD"
+        exchangeRates = defaults.dictionary(forKey: Key.exchangeRates) as? [String: String] ?? [:]
+    }
+
+    /// The rates that parse as positive numbers ("1.08" or "1,08").
+    var parsedRates: [String: Decimal] {
+        exchangeRates.compactMapValues { text in
+            let cleaned = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+            guard let rate = Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX")), rate > 0 else { return nil }
+            return rate
+        }
     }
 
     var privacyPolicy: PrivacyPolicy {
@@ -62,6 +79,8 @@ final class AppSettings {
         defaults.set(idleGapMinutes, forKey: Key.idleGapMinutes)
         defaults.set(askOnAppSwitch, forKey: Key.askOnAppSwitch)
         defaults.set(seriesPasteStat, forKey: Key.seriesPasteStat)
+        defaults.set(baseCurrency, forKey: Key.baseCurrency)
+        defaults.set(exchangeRates, forKey: Key.exchangeRates)
         onChange?()
     }
 }

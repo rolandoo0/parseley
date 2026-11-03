@@ -13,6 +13,7 @@ struct MenuContent: View {
     var body: some View {
         Button("Open Clipboard History    ⌘⇧V") { env.showPanel() }
         Button("Visualize Clipboard JSON") { env.visualizeClipboardJSON() }
+        Button("View Clipboard as Table") { env.viewClipboardAsTable() }
 
         Divider()
 

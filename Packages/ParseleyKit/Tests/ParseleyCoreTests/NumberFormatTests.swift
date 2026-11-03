@@ -99,6 +99,6 @@ private func euValues(_ text: String) -> [Decimal] { eu.parse(text).map(\.value)
 
     @Test func registryOrderingWithPins() {
         let ids = TransformRegistry.ordered(pinned: ["sql.in", "nope", "list.dedupe"]).map(\.id)
-        #expect(ids == ["sql.in", "list.dedupe", "list.comma", "json.array", "sort.asc", "sort.desc", "text.clean", "number.plain"])
+        #expect(ids == ["sql.in", "list.dedupe", "list.comma", "json.array", "sort.asc", "sort.desc", "text.clean", "number.plain", "paste.column", "paste.row", "table.transpose"])
     }
 }

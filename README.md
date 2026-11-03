@@ -72,6 +72,9 @@ Run `xcodegen` again whenever you add or remove files under `App/` or edit `proj
 | ⌘↩ | Copy only (don't paste) |
 | ⌘P | Pin / unpin |
 | ⌘J | Visualize the selected JSON clip as a graph |
+| ⌘T | Open the selected table (CSV/TSV…) in the table viewer |
+| Space (search empty) / ⌘Y | Quick Look the selected clip |
+| drag a row | Drop the clip's text into any app |
 | ⌘⌫ | Delete |
 | ⌘-click / ⇧-click | Select several clips (combined stats) |
 | ⌘1 – ⌘6 | Copy a stat (⌘1 = the mode's main stat) |
@@ -161,6 +164,58 @@ When a series ends (Stop, New series, or splitting at a prompt) its total is sav
 your history as a **Series total** clip: `Σ 4,210.50 · Q3 expenses · 12 values`.
 Pasting it pastes the number. Series totals are never removed by the history limit or
 "Clear All but Pinned".
+
+### Quick math
+
+Type `>` then an operation to apply it to every number in the selected clip(s):
+`>× 1.2` (or `*`, `x`), `>+ 5`, `>- 10`, `>÷ 3` (or `/`), `>+ 15%` (increase by 15%),
+`>- 10%`, `>× 20%` (20% of each), `>round 2`, `>round`. The text around the numbers,
+currencies, units and thousands separators are kept: "Flights $1,204.50" `>× 2` →
+"Flights $2,409.00". ⏎ pastes the result, ⌘⏎ copies it.
+
+### Pasting into spreadsheets
+
+`>paste as column` (one item per line), `>paste as row` (tab-separated) and
+`>paste transposed` (rows ↔ columns) reshape the selected clip and paste it, ready for
+Excel, Numbers or Google Sheets. Also available as transforms (`paste.column`,
+`paste.row`, `table.transpose`) for recipes and the CLI.
+
+### Units and currencies
+
+Numbers keep what they measure: `$1,204.50`, `€380`, `USD 99`, `380 EUR`, `15%`, `12 kg`,
+`5km`, `250 MB`, `30 min`. When a clip mixes units, the panel says so under the stats and
+shows each sum separately ("Mixed units: $1,304.50 + €380.00 + 12 kg"). Set your currency
+and exchange rates in **Settings → General → Currencies** to also see the total in your
+currency (rates are entered by you; Parseley never goes online). `>sums by unit` and
+`>total in USD` copy them.
+
+### Sparkline, outliers and gaps
+
+Under the stat tiles, a sparkline shows the selected numbers in order, with outliers as
+red dots. Notes point out **outliers** (values outside 1.5× the interquartile range) and
+**missing numbers** in a sequence (invoice 1001, 1002, 1004 → 1003 is missing). Click a
+note, or use `>copy outliers` / `>copy missing numbers`, to copy them.
+
+### Table viewer
+
+Copy a CSV or TSV (or a range from a spreadsheet), select it and click **Table** (⌘T,
+`>open as table`, or menu bar → **View Clipboard as Table**): a sortable, filterable grid
+with totals of numeric columns at the bottom (click one to copy it). Tick the columns you
+want and **Copy TSV** (pastes as cells) or **Copy CSV**. Quoted fields, commas inside
+quotes and semicolon/pipe-separated files are handled.
+
+### Snippets
+
+Saved templates with fields, managed in **Settings → Snippets**:
+`SELECT * FROM {table} WHERE id {clipboard|text.clean|list.dedupe|sql.in};`.
+`{clipboard}` is the selected clip, any other `{name}` is a field you fill in, and `|`
+pipes a value through transforms. Run one from the command bar (`>snippet …` or its name):
+fill in the fields, ⏎ pastes, ⌘⏎ copies.
+
+### Quick Look and drag and drop
+
+Press Space (with nothing typed) or ⌘Y to preview the selected clip with Quick Look (JSON
+and CSV are formatted). Drag any clip out of the panel to drop its text into another app.
 
 ### JSON visualizer
 

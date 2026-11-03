@@ -50,8 +50,15 @@ public enum TransformRegistry {
             DedupeTransform(format: format),
             CleanWhitespaceTransform(),
             RemoveNumberFormattingTransform(format: format),
+            AsColumnTransform(format: format),
+            AsRowTransform(format: format),
+            TransposeTransform(format: format),
         ]
     }
+
+    /// Spreadsheet shapes: offered as "Paste as …" commands rather than buttons, unless a
+    /// mode pins them.
+    public static let pasteShapes: Set<String> = ["paste.column", "paste.row", "table.transpose"]
 
     public static func transform(id: String, format: NumberFormat = .us) -> (any Transform)? {
         all(format: format).first { $0.id == id }

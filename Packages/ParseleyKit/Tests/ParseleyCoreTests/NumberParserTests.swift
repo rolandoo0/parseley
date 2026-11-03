@@ -157,8 +157,6 @@ private func d(_ s: String) -> Decimal { Decimal(string: s, locale: Locale(ident
         "A1",
         "SKU-1234",        // hyphenated identifier
         "COVID-19",
-        "5kg",             // unit glued on
-        "3Mbps",
         "1e5",
         "file_2",
     ])
@@ -226,5 +224,57 @@ private func d(_ s: String) -> Decimal { Decimal(string: s, locale: Locale(ident
     @Test(arguments: ["", "abc", "42 apples", "1 2", "2024-01-05", "$", "1,2"])
     func rejectsAnythingElse(_ input: String) {
         #expect(NumberParser().parseWhole(input) == nil)
+    }
+}
+
+@Suite struct NumberUnitTests {
+    func parsed(_ text: String, _ format: NumberFormat = .us) -> [ParsedNumber] { NumberParser(format: format).parse(text) }
+
+    @Test(arguments: [
+        ("$1,204.50", "USD", "1204.50"), ("€380", "EUR", "380"), ("£5", "GBP", "5"), ("¥900", "JPY", "900"),
+        ("USD 1,204.50", "USD", "1204.50"), ("1,204.50 EUR", "EUR", "1204.50"), ("CHF 99", "CHF", "99"),
+        ("12%", "%", "12"), ("5kg", "kg", "5"), ("12 kg", "kg", "12"), ("3Mbps", "Mbps", "3"),
+        ("250MB", "MB", "250"), ("1.5 GB", "GB", "1.5"), ("30 min", "min", "30"), ("8hrs", "h", "8"),
+        ("10 lbs", "lb", "10"), ("5km", "km", "5"), ("100m", "m", "100"), ("2L", "l", "2"),
+    ])
+    func recognisesUnits(_ input: String, _ unit: String, _ digits: String) throws {
+        let numbers = parsed(input)
+        #expect(numbers.count == 1, "\(input) → \(numbers.map(\.text))")
+        let n = try #require(numbers.first)
+        #expect(n.unit == unit)
+        #expect(n.digits == digits)
+        #expect(n.text == input)
+    }
+
+    @Test func bareNumbersHaveNoUnit() {
+        #expect(parsed("42").first?.unit == nil)
+        #expect(parsed("1.2k").first?.unit == nil)
+        #expect(parsed("5M").first?.value == 5_000_000)
+    }
+
+    @Test func ambiguousSpacedWordsAreNotUnits() {
+        // "in", "m", "s" only count when glued on.
+        let n = parsed("3 in the box, 5 m away")
+        #expect(n.map(\.unit) == [nil, nil])
+    }
+
+    @Test func unitsKeepListsNumbersOnly() throws {
+        let numbers = try #require(NumberParser().numbersOnly("12 kg\n5 kg\n3.5 kg"))
+        #expect(numbers.map(\.value) == [12, 5, Decimal(string: "3.5")!])
+        #expect(Set(numbers.compactMap(\.unit)) == ["kg"])
+    }
+
+    @Test func digitsRangeCoversJustTheDigits() throws {
+        let text = "Total: ($1,204.50)"
+        let n = try #require(parsed(text).first)
+        #expect(String(text[try #require(n.digitsRange)]) == "1,204.50")
+        #expect(n.value == Decimal(string: "-1204.50")!)
+    }
+
+    @Test func europeanFormatUnits() throws {
+        let n = try #require(parsed("1.204,50 €", .european).first)
+        #expect(n.unit == "EUR")
+        #expect(n.value == Decimal(string: "1204.50")!)
+        #expect(parsed("12,5 kg", .european).first?.unit == "kg")
     }
 }

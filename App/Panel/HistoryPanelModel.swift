@@ -77,6 +77,7 @@ final class HistoryPanelModel {
     /// followed by the user's recipes.
     var transforms: [any Transform] {
         TransformRegistry.ordered(pinned: mode.pinnedTransforms, format: format)
+            .filter { !TransformRegistry.pasteShapes.contains($0.id) || mode.pinnedTransforms.contains($0.id) }
             + (recipes?.transforms(format: format) ?? [])
     }
 
@@ -117,6 +118,64 @@ final class HistoryPanelModel {
     /// The stat tiles for the selection, in the mode's format with its main stat first.
     var statItems: [NumberStats.Item] {
         selectionStats?.items(format: format, primary: mode.primaryStat) ?? []
+    }
+
+    /// Every number in the selection (in order), with units. Empty when numbers are hidden.
+    var selectionNumbers: [ParsedNumber] {
+        guard mode.showsNumbers else { return [] }
+        if multi.isActive { return selectedClips.flatMap { numbers(in: $0) } }
+        if let column = selectedColumn, let table = selectedTable, table.columns.indices.contains(column),
+           let clip = selectedClip, let data = DataTable.parse(clip.content, format: format), column < data.columnCount {
+            return data.numbers(in: column, format: format)
+        }
+        return selectedClip.map { numbers(in: $0) } ?? []
+    }
+
+    /// Mixed units ("$1,204.50 + €380"), and the total in the base currency when rates
+    /// allow. Nil when everything shares one unit (or has none) and needs no conversion.
+    var unitSummary: (sums: String, converted: String?)? {
+        let numbers = selectionNumbers
+        guard numbers.count >= 2 else { return nil }
+        let breakdown = UnitBreakdown(numbers)
+        let (base, rates) = currencyRates()
+        let converted = breakdown.converted(to: base, rates: rates).map {
+            UnitBreakdown.display($0, unit: base, fractionDigits: 2, format: format)
+        }
+        if breakdown.isMixed { return (breakdown.summary(format: format), converted) }
+        // One foreign currency with a rate: offer the total in the base currency too.
+        if let unit = breakdown.units.first, unit != base, let converted, breakdown.groups.count == 1 {
+            return (breakdown.summary(format: format), converted)
+        }
+        return nil
+    }
+
+    /// Outliers and gaps in the selection's numbers.
+    var insights: NumberInsights? {
+        let values = selectionNumbers.map(\.value)
+        guard values.count >= NumberInsights.minimumForGaps else { return nil }
+        let insights = NumberInsights(values: values)
+        return insights.isEmpty ? nil : insights
+    }
+
+    /// The selection's numbers for the sparkline (at most 2,000), or empty below 3.
+    var sparklineValues: [Double] {
+        let numbers = selectionNumbers
+        guard numbers.count >= 3 else { return [] }
+        return numbers.prefix(2_000).map { NSDecimalNumber(decimal: $0.value).doubleValue }
+    }
+
+    func formatNumber(_ value: Decimal) -> String {
+        NumberFormatting.grouped(value, maxFractionDigits: 6, format: format)
+    }
+
+    private func numbers(in clip: Clip) -> [ParsedNumber] {
+        guard let id = clip.id, clip.content.utf16.count <= Self.maxStatsLength else { return [] }
+        let key = "\(id)|\(format.rawValue)"
+        if let cached = numbersCache[key] { return cached }
+        let found = NumberParser(format: format).parse(clip.content)
+        if numbersCache.count > 16 { numbersCache.removeAll() }
+        numbersCache[key] = found
+        return found
     }
 
     /// "Σ 1,492.5 · 3 values" for a list row, or nil. Uses the sum stored at capture
@@ -194,6 +253,23 @@ final class HistoryPanelModel {
 
     /// Opens JSON text as a graph (text, title); set by AppEnvironment.
     @ObservationIgnored var onVisualizeJSON: ((String, String) -> Void)?
+    /// Opens CSV/TSV text in the table viewer (text, title).
+    @ObservationIgnored var onOpenTable: ((String, String) -> Void)?
+    /// Quick Look on a clip (text, kind).
+    @ObservationIgnored var onQuickLook: ((String, ClipKind) -> Void)?
+    /// The user's base currency and manual exchange rates (Settings → General).
+    @ObservationIgnored var currencyRates: () -> (base: String, rates: [String: Decimal]) = { ("USD", [:]) }
+    /// Saved snippets (Settings → Snippets).
+    @ObservationIgnored var snippets: () -> [Snippet] = { [] }
+
+    /// A snippet waiting for its fields to be filled in (shown as a small form).
+    private(set) var pendingSnippet: PendingSnippet?
+    var snippetValues: [String: String] = [:]
+
+    struct PendingSnippet: Equatable {
+        let snippet: Snippet
+        let clipboard: String
+    }
 
     /// Welcome-tour hooks (set by AppEnvironment).
     @ObservationIgnored var onStatCopied: (() -> Void)?
@@ -209,6 +285,8 @@ final class HistoryPanelModel {
     @ObservationIgnored private let pasteService = PasteService()
     @ObservationIgnored private var hasPromptedForAccessibility = false
     @ObservationIgnored private var statsCache: [String: NumberStats?] = [:]
+    @ObservationIgnored private var numbersCache: [String: [ParsedNumber]] = [:]
+    @ObservationIgnored private var tableViewCache: [Int64: Bool] = [:]
     @ObservationIgnored private var tableCache: [String: ParsedTable?] = [:]
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var commandTargets: [Clip] = []
@@ -247,7 +325,10 @@ final class HistoryPanelModel {
         fullClips = [:]
         statsCache = [:]
         tableCache = [:]
+        numbersCache = [:]
+        tableViewCache = [:]
         commandTargets = []
+        pendingSnippet = nil
         multi.clear()
     }
 
@@ -302,6 +383,10 @@ final class HistoryPanelModel {
     /// Enter / double-click: put the clip on the clipboard, close, and paste into the app
     /// that was frontmost before the panel opened. In the command bar: run the command.
     func activate(_ row: ClipSummary? = nil, mode activation: ActivationMode = .paste) {
+        if row == nil, pendingSnippet != nil {
+            submitSnippet(copyOnly: activation == .copyOnly)
+            return
+        }
         if row == nil, isCommandMode {
             runCommand(at: commandIndex, copyOnly: activation == .copyOnly)
             return
@@ -355,7 +440,13 @@ final class HistoryPanelModel {
     /// Command bar ⏎ on a number: close the panel and paste it into the app you were in.
     /// The value is not added to history (or counted in a running series).
     func pasteValue(_ item: NumberStats.Item) {
-        monitor.writeWithoutRecording(item.copyText)
+        pasteText(item.copyText)
+    }
+
+    /// Closes the panel and pastes `text` into the app you were in, without adding it to
+    /// history (or counting it in a running series).
+    func pasteText(_ text: String) {
+        monitor.writeWithoutRecording(text)
         let target = pasteTarget()
         closePanel()
         if pasteService.paste(into: target) == .needsAccessibility, !hasPromptedForAccessibility {
@@ -363,6 +454,108 @@ final class HistoryPanelModel {
             hasPromptedForAccessibility = true
             AccessibilityPermission.requestWithSystemPrompt()
         }
+    }
+
+    /// Copies a result into history and selects it, so ↩ pastes it.
+    func copyResult(_ text: String, message: String) {
+        do {
+            let result = try monitor.copyToClipboard(newText: text)
+            multi.clear()
+            reload()
+            if let id = result.clip.id { selection.select(id, in: ids) }
+            showToast(message)
+        } catch {
+            errorMessage = "Couldn't copy: \(error.localizedDescription)"
+        }
+    }
+
+    /// Joined text of clips (several clips one per line), for commands.
+    private func joinedText(of clips: [Clip]) -> String {
+        clips.map { $0.content.trimmingCharacters(in: .newlines) }.joined(separator: "\n")
+    }
+
+    // MARK: Snippets
+
+    /// Runs a snippet on the given clips: pastes right away, or asks for its fields first.
+    func useSnippet(_ snippet: Snippet, on clips: [Clip]) {
+        let clipboard = joinedText(of: clips)
+        if snippet.fields.isEmpty {
+            finishSnippet(snippet, clipboard: clipboard, values: [:])
+        } else {
+            snippetValues = Dictionary(uniqueKeysWithValues: snippet.fields.map { ($0, "") })
+            pendingSnippet = PendingSnippet(snippet: snippet, clipboard: clipboard)
+        }
+    }
+
+    /// ↩ in the snippet form.
+    func submitSnippet(copyOnly: Bool = false) {
+        guard let pending = pendingSnippet else { return }
+        pendingSnippet = nil
+        finishSnippet(pending.snippet, clipboard: pending.clipboard, values: snippetValues, copyOnly: copyOnly)
+    }
+
+    func cancelSnippet() {
+        pendingSnippet = nil
+    }
+
+    private func finishSnippet(_ snippet: Snippet, clipboard: String, values: [String: String], copyOnly: Bool = false) {
+        do {
+            let text = try snippet.render(clipboard: clipboard, values: values, format: format)
+            if copyOnly { copyResult(text, message: "\(snippet.name) copied · ↩ to paste") } else { pasteText(text) }
+        } catch let error as Snippet.RenderError {
+            showToast(error.message)
+        } catch {
+            showToast("\(snippet.name): \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: Table viewer, Quick Look, drag
+
+    private func unitSummaryFor(_ clips: [Clip]) -> (sums: String, converted: String?)? {
+        let numbers = clips.flatMap { numbers(in: $0) }
+        guard numbers.count >= 2 else { return nil }
+        let breakdown = UnitBreakdown(numbers)
+        let (base, rates) = currencyRates()
+        let converted = breakdown.converted(to: base, rates: rates).map { UnitBreakdown.display($0, unit: base, format: format) }
+        guard breakdown.isMixed || (converted != nil && breakdown.units != [base]) else { return nil }
+        return (breakdown.summary(format: format), converted)
+    }
+
+    private func insightsFor(_ clips: [Clip]) -> NumberInsights? {
+        let values = clips.flatMap { numbers(in: $0) }.map(\.value)
+        guard values.count >= NumberInsights.minimumForGaps else { return nil }
+        let insights = NumberInsights(values: values)
+        return insights.isEmpty ? nil : insights
+    }
+
+    /// True when the focused clip is a table (TSV/CSV…) that the table viewer can open.
+    var canOpenTable: Bool {
+        guard !multi.isActive, let row = selectedSummary, row.lineCount >= 2 else { return false }
+        if row.kind == .table { return true }
+        if let cached = tableViewCache[row.id] { return cached }
+        let ok = selectedClip.map { $0.content.utf16.count <= 2_000_000 && DataTable.parse($0.content, format: format) != nil } ?? false
+        if tableViewCache.count > 32 { tableViewCache.removeAll() }
+        tableViewCache[row.id] = ok
+        return ok
+    }
+
+    /// Table button / ⌘T.
+    func openTableSelection() {
+        guard canOpenTable, let clip = selectedClip else { return }
+        closePanel()
+        onOpenTable?(clip.content, ClipPreview.title(clip.content, maxLength: 60))
+    }
+
+    /// Space (with an empty search) / ⌘Y: preview the focused clip with Quick Look.
+    func quickLookSelection() {
+        guard let clip = selectedClip else { return }
+        onQuickLook?(clip.content, clip.kind)
+    }
+
+    /// Dragging a row out of the panel drops its text into the other app.
+    func dragProvider(for row: ClipSummary) -> NSItemProvider {
+        let text = fullClip(row.id)?.content ?? row.preview
+        return NSItemProvider(object: text as NSString)
     }
 
     /// Click on a stat tile: copy its value (it also lands in history). The panel stays
@@ -462,6 +655,19 @@ final class HistoryPanelModel {
     private var allCommands: [PanelCommand] {
         let targets = commandTargets
         var list: [PanelCommand] = []
+        let typed = String(query.dropFirst())
+        let targetText = joinedText(of: targets)
+
+        // Quick math: "> × 1.2", "> + 15%", "> round 2".
+        if let operation = NumberMath.parse(typed, format: format), !targets.isEmpty,
+           let result = try? NumberMath.apply(operation, to: targetText, format: format) {
+            let preview = ClipPreview.title(result, maxLength: 40)
+            list.append(PanelCommand(
+                id: "math", title: operation.title(format: format), detail: preview, icon: "function",
+                keywords: typed, isValue: true,
+                copy: { [weak self] in self?.copyResult(result, message: "Result copied · ↩ to paste") }
+            ) { [weak self] in self?.pasteText(result) })
+        }
 
         // Transforms, in the mode's order.
         for transform in transforms {
@@ -502,6 +708,78 @@ final class HistoryPanelModel {
                     copy: { [weak self] in self?.copyStat(sum) }
                 ) { [weak self] in self?.pasteValue(sum) })
             }
+        }
+
+        // Spreadsheet shapes: paste down a column, across a row, or transposed.
+        if !targets.isEmpty {
+            let shapes: [(any Transform, String, String)] = [
+                (AsColumnTransform(format: format), "Paste as column", "arrow.down.to.line"),
+                (AsRowTransform(format: format), "Paste as row", "arrow.right.to.line"),
+                (TransposeTransform(format: format), "Paste transposed", "arrow.left.arrow.right"),
+            ]
+            for (transform, title, icon) in shapes {
+                guard let output = try? transform.apply(targetText) else { continue }
+                list.append(PanelCommand(
+                    id: "shape.\(transform.id)", title: title, detail: "Spreadsheet", icon: icon,
+                    keywords: "excel sheets numbers spreadsheet cells \(transform.title)",
+                    copy: { [weak self] in self?.copyResult(output, message: "\(title) copied · ↩ to paste") }
+                ) { [weak self] in self?.pasteText(output) })
+            }
+        }
+
+        // Units: sums per unit, and the converted total.
+        if let units = unitSummaryFor(targets) {
+            list.append(PanelCommand(id: "units.sums", title: "Copy sums by unit", detail: units.sums, icon: "dollarsign.circle",
+                                     keywords: "currency units mixed sum total") { [weak self] in
+                self?.copyResult(units.sums, message: "Copied sums by unit")
+            })
+            if let converted = units.converted {
+                let base = currencyRates().base
+                list.append(PanelCommand(id: "units.converted", title: "Total in \(base)", detail: converted, icon: "dollarsign.circle",
+                                         keywords: "currency convert exchange rate sum total", isValue: true,
+                                         copy: { [weak self] in self?.copyResult(converted, message: "Copied total in \(base)") }
+                ) { [weak self] in self?.pasteText(converted) })
+            }
+        }
+
+        // Outliers and gaps.
+        if let insights = insightsFor(targets) {
+            if !insights.outliers.isEmpty {
+                let text = insights.outliers.map(formatNumber).joined(separator: "\n")
+                list.append(PanelCommand(id: "insights.outliers", title: "Copy outliers",
+                                         detail: insights.outliers.prefix(3).map(formatNumber).joined(separator: ", "), icon: "exclamationmark.triangle",
+                                         keywords: "outlier unusual anomaly") { [weak self] in
+                    self?.copyResult(text, message: "Copied \(insights.outliers.count) outlier\(insights.outliers.count == 1 ? "" : "s")")
+                })
+            }
+            if !insights.gaps.isEmpty {
+                let text = insights.gaps.map(formatNumber).joined(separator: "\n")
+                list.append(PanelCommand(id: "insights.gaps", title: "Copy missing numbers",
+                                         detail: insights.gaps.prefix(4).map(formatNumber).joined(separator: ", "), icon: "number.square",
+                                         keywords: "gaps missing sequence skipped") { [weak self] in
+                    self?.copyResult(text, message: "Copied \(insights.gaps.count) missing number\(insights.gaps.count == 1 ? "" : "s")")
+                })
+            }
+        }
+
+        // Snippets.
+        for snippet in snippets() {
+            list.append(PanelCommand(id: "snippet.\(snippet.id)", title: "Snippet: \(snippet.name)",
+                                     detail: snippet.fields.isEmpty ? "Snippet" : "Snippet · \(snippet.fields.count) field\(snippet.fields.count == 1 ? "" : "s")",
+                                     icon: "text.badge.plus", keywords: "snippet template \(snippet.name)") { [weak self] in
+                self?.useSnippet(snippet, on: targets)
+            })
+        }
+
+        // Table viewer.
+        if targets.count == 1, let target = targets.first, target.content.utf16.count <= 2_000_000,
+           target.kind == .table || DataTable.parse(target.content, format: format) != nil {
+            list.append(PanelCommand(id: "table.view", title: "Open as table", detail: "Table · ⌘T", icon: "tablecells",
+                                     keywords: "csv tsv grid sort filter spreadsheet view") { [weak self] in
+                guard let self else { return }
+                self.closePanel()
+                self.onOpenTable?(target.content, ClipPreview.title(target.content, maxLength: 60))
+            })
         }
 
         // JSON graph.

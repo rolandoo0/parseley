@@ -21,7 +21,11 @@ final class PanelController {
         // NSHostingView is the bridge that puts a SwiftUI view tree inside an AppKit window.
         panel.contentView = NSHostingView(rootView: HistoryView(model: model))
 
-        panel.onResignKey = { [weak self] in self?.hide() }
+        panel.onResignKey = { [weak self] in
+            // Quick Look takes focus while previewing; keep the panel open behind it.
+            guard !QuickLookController.shared.isVisible else { return }
+            self?.hide()
+        }
         model.closePanel = { [weak self] in self?.hide() }
         model.pasteTarget = { [weak self] in self?.previousApp }
     }
@@ -60,6 +64,7 @@ final class PanelController {
         guard isShown else { return }
         isShown = false
         removeKeyMonitor()
+        QuickLookController.shared.close()
         panel.orderOut(nil)
         model.releaseMemory()   // don't hold rows or clip text while hidden
     }
@@ -115,8 +120,18 @@ final class PanelController {
         case kVK_Return, kVK_ANSI_KeypadEnter:
             model.activate(mode: modifiers == .command ? .copyOnly : .paste)
         case kVK_Escape:
-            // First Esc clears the search / leaves the command bar; the next one closes.
-            if model.query.isEmpty { hide() } else { model.query = "" }
+            // Esc closes Quick Look or the snippet form first; then clears the search /
+            // leaves the command bar; the next one closes the panel.
+            if QuickLookController.shared.isVisible { QuickLookController.shared.close() }
+            else if model.pendingSnippet != nil { model.cancelSnippet() }
+            else if model.query.isEmpty { hide() } else { model.query = "" }
+        case kVK_Space where modifiers.isEmpty && model.query.isEmpty && model.pendingSnippet == nil:
+            // Space with nothing typed: Quick Look, like in Finder.
+            QuickLookController.shared.isVisible ? QuickLookController.shared.close() : model.quickLookSelection()
+        case kVK_ANSI_Y where modifiers == .command && model.pendingSnippet == nil:   // ⌘Y
+            QuickLookController.shared.isVisible ? QuickLookController.shared.close() : model.quickLookSelection()
+        case kVK_ANSI_T where modifiers == .command && !model.isCommandMode && model.pendingSnippet == nil:   // ⌘T
+            model.openTableSelection()
         case kVK_Delete where modifiers == .command && !model.isCommandMode:   // ⌘⌫
             model.deleteSelected()
         case kVK_ANSI_P where modifiers == .command && !model.isCommandMode:   // ⌘P

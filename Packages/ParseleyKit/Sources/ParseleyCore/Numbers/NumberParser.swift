@@ -19,6 +19,32 @@ public struct ParsedNumber: Equatable, Sendable {
     public var digits: String
     /// Value of a k / M / B suffix (1 if none).
     public var multiplier: Decimal
+    /// What the number measures, normalized: a currency code ("USD", "EUR"; symbols map
+    /// to codes), "%", or a unit ("kg", "km", "MB", "min", "h"…). Nil for a bare number.
+    public var unit: String? = nil
+    /// Where just the digits sit in the source text (the "1,204.50" in "($1,204.50 USD)").
+    public var digitsRange: Range<String.Index>? = nil
+    /// The same, as UTF-16 offsets within `text`, for rewriting the number in place.
+    public var digitsOffsets: Range<Int>? = nil
+
+    /// True if the unit is a currency.
+    public var isCurrency: Bool { unit.map(NumberUnits.currencyCodes.contains) ?? false }
+}
+
+/// Units the parser recognises and how they're normalized.
+public enum NumberUnits {
+    public static let currencyCodes: Set<String> = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "MXN", "BRL", "INR"]
+    static let symbolCodes: [String: String] = ["$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY"]
+    static let aliases: [String: String] = [
+        "lbs": "lb", "hrs": "h", "hr": "h", "sec": "s", "L": "l", "kB": "KB",
+    ]
+    /// Regex alternatives, longest first so "min" wins over "mi" and "m".
+    static let glued = "kWh|Mbps|Gbps|mph|kg|mg|g|lbs|lb|oz|km|cm|mm|mi|ft|in|min|ms|ml|m|l|L|s|hrs|hr|h|GB|MB|KB|kB|TB"
+    /// After a space only unambiguous units (no "in", "m", "s"…: "3 in the box").
+    static let spaced = "kWh|Mbps|Gbps|mph|kg|mg|lbs|lb|oz|km|cm|mm|mi|ft|min|ms|ml|hrs|hr|sec|GB|MB|KB|TB|USD|EUR|GBP|JPY|CAD|AUD|CHF|CNY|MXN|BRL|INR"
+    static let codes = "USD|EUR|GBP|JPY|CAD|AUD|CHF|CNY|MXN|BRL|INR"
+
+    static func normalize(_ unit: String) -> String { aliases[unit] ?? unit }
 }
 
 /// Extracts numbers from messy text: "$1,204.50", "(300)" (negative), "12%", "-4.5",
@@ -27,7 +53,7 @@ public struct ParsedNumber: Equatable, Sendable {
 /// `format` decides the separators: `.us` reads "1,204.50", `.european` reads "1.204,50".
 /// Deliberately skips things that look numeric but aren't quantities: dates, times,
 /// version numbers, IP addresses, phone numbers, and digits glued to letters ("A1",
-/// "SKU-1234", "5kg").
+/// "SKU-1234"). Units and currencies are recognised: "5kg", "12 kg", "USD 1,204", "€380".
 public struct NumberParser: Sendable {
     public let format: NumberFormat
 
@@ -125,15 +151,29 @@ public struct NumberParser: Sendable {
         guard let swiftRange = Range(range, in: text) else { return nil }
 
         let fraction = digits.split(separator: ".", maxSplits: 1).dropFirst().first?.count ?? 0
+        let symbol = group("cur1") ?? group("cur2")
+        let isPercent = group("pct") != nil
+        let unit: String? =
+            if let code = group("code1") ?? group("unit2").flatMap({ NumberUnits.currencyCodes.contains($0) ? $0 : nil }) { code }
+            else if let symbol { NumberUnits.symbolCodes[symbol] }
+            else if isPercent { "%" }
+            else if let u = group("unit") ?? group("unit2") { NumberUnits.normalize(u) }
+            else { nil }
+        let numRange = match.range(withName: "num")
+        let digitsRange = Range(numRange, in: text)
+        let start = numRange.location - range.location
         return ParsedNumber(
             value: value,
             text: String(text[swiftRange]),
             range: swiftRange,
-            isPercent: group("pct") != nil,
-            currencySymbol: group("cur1") ?? group("cur2"),
+            isPercent: isPercent,
+            currencySymbol: symbol,
             fractionDigits: fraction,
             digits: digits,
-            multiplier: multiplier
+            multiplier: multiplier,
+            unit: unit,
+            digitsRange: digitsRange,
+            digitsOffsets: start >= 0 ? start..<(start + numRange.length) : nil
         )
     }
 
@@ -150,12 +190,17 @@ public struct NumberParser: Sendable {
         let exclusions: [NSRegularExpression]
     }
 
+    private static let glued = NumberUnits.glued
+    private static let spaced = NumberUnits.spaced
+    private static let codes = NumberUnits.codes
+
     // NSRegularExpression is immutable and thread-safe; compile each set once.
     private static let usPatterns = Patterns(
         number: try! NSRegularExpression(pattern: #"""
             (?<![\p{L}\p{N}_.])            # not glued to a word, digit or dot on the left
             (?<![\p{L}\p{N}][-−])          # not the "-19" in "COVID-19" / "SKU-1234"
             (?<open>\()?
+            (?:(?<code1>\#(codes))\x20?)?     # "USD 1,204.50"
             (?<sign1>[-−+])?
             (?:(?<cur1>[$€£¥])\x20?)?        # \x20 = one plain space (never a newline)
             (?<sign2>[-−+])?
@@ -164,11 +209,15 @@ public struct NumberParser: Sendable {
               | \d+(?:\.\d+)?                  # 1204 / 1204.5
               | \.\d+                          # .5
             )
-            (?<suffix>bn|[kKMB])?
-            (?![\p{L}\p{N}_])              # not glued to a word on the right ("5kg", "3Mbps")
+            (?:
+                (?<unit>\#(glued))(?![\p{L}\p{N}_])    # a unit glued on: "5kg", "250MB"
+              | (?<suffix>bn|[kKMB])?
+                (?![\p{L}\p{N}_])          # otherwise not glued to a word ("A1", "abc123")
+            )
             (?!\.\d)                       # not the start of "1.2.3"
             (?<pct>\x20?%)?
             (?:\x20?(?<cur2>[$€£¥]))?
+            (?:\x20(?<unit2>\#(spaced))(?![\p{L}\p{N}_]))?   # "12 kg", "380 EUR"
             (?<close>\))?
             """#, options: [.allowCommentsAndWhitespace]),
         exclusions: commonExclusions + [
@@ -184,6 +233,7 @@ public struct NumberParser: Sendable {
             (?<![\p{L}\p{N}_.,])
             (?<![\p{L}\p{N}][-−])
             (?<open>\()?
+            (?:(?<code1>\#(codes))\x20?)?
             (?<sign1>[-−+])?
             (?:(?<cur1>[$€£¥])\x20?)?
             (?<sign2>[-−+])?
@@ -191,11 +241,15 @@ public struct NumberParser: Sendable {
                 \d{1,3}(?:\.\d{3})+(?:,\d+)?   # 1.204 / 1.204,50
               | \d+(?:,\d+)?                  # 1204 / 1204,5
             )
-            (?<suffix>bn|[kKMB])?
-            (?![\p{L}\p{N}_])
+            (?:
+                (?<unit>\#(glued))(?![\p{L}\p{N}_])
+              | (?<suffix>bn|[kKMB])?
+                (?![\p{L}\p{N}_])
+            )
             (?![.,]\d)                      # not part of "1.2.3" or "1,2,3"
             (?<pct>\x20?%)?
             (?:\x20?(?<cur2>[$€£¥]))?
+            (?:\x20(?<unit2>\#(spaced))(?![\p{L}\p{N}_]))?
             (?<close>\))?
             """#, options: [.allowCommentsAndWhitespace]),
         exclusions: commonExclusions + [

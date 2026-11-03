@@ -76,6 +76,9 @@ enum Theme {
         case "list.dedupe": "square.on.square"
         case "text.clean": "sparkles"
         case "number.plain": "number"
+        case "paste.column": "arrow.down.to.line"
+        case "paste.row": "arrow.right.to.line"
+        case "table.transpose": "arrow.left.arrow.right"
         default: "wand.and.stars"
         }
     }

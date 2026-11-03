@@ -32,6 +32,8 @@ final class AppEnvironment {
     @ObservationIgnored let toast: ToastController
     @ObservationIgnored let pasteQueue: PasteQueueController
     @ObservationIgnored let jsonGraph: JSONGraphController
+    @ObservationIgnored let tableViewer: TableViewerController
+    @ObservationIgnored let snippets: SnippetController
     @ObservationIgnored let onboarding = OnboardingController()
     @ObservationIgnored let panelModel: HistoryPanelModel
     @ObservationIgnored let panelController: PanelController
@@ -91,6 +93,8 @@ final class AppEnvironment {
         self.pasteQueue = PasteQueueController(monitor: monitor, toast: toast)
         // Copying from the graph (a path, a subtree) goes through history like any copy.
         self.jsonGraph = JSONGraphController(copyText: { text in _ = try? monitor.copyToClipboard(newText: text) })
+        self.tableViewer = TableViewerController(copyText: { text in _ = try? monitor.copyToClipboard(newText: text) })
+        self.snippets = SnippetController()
         self.panelModel = panelModel
         self.panelController = PanelController(model: panelModel)
         self.series = series
@@ -157,6 +161,15 @@ final class AppEnvironment {
         }
         panelModel.pasteQueue = pasteQueue
         panelModel.onVisualizeJSON = { [weak self] text, title in self?.jsonGraph.show(text: text, title: title) }
+        panelModel.onOpenTable = { [weak self] text, title in
+            guard let self else { return }
+            self.tableViewer.show(text: text, title: title, format: self.modes.current.numberFormat)
+        }
+        panelModel.onQuickLook = { text, kind in QuickLookController.shared.preview(text: text, kind: kind) }
+        panelModel.snippets = { [weak self] in self?.snippets.snippets ?? [] }
+        panelModel.currencyRates = { [weak self] in
+            (self?.settings.baseCurrency ?? "USD", self?.settings.parsedRates ?? [:])
+        }
         KeyboardShortcuts.onKeyUp(for: .pasteNext) { [weak self] in
             guard let self else { return }
             // The queue wins while it runs; otherwise this pastes the series result.
@@ -211,6 +224,14 @@ final class AppEnvironment {
 
     func showPanel() {
         panelController.show()
+    }
+
+    /// Menu bar → "View Clipboard as Table": opens a copied CSV/TSV in the table viewer.
+    func viewClipboardAsTable() {
+        guard let text = monitor.currentText, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return toast.show("The clipboard is empty", icon: "tablecells")
+        }
+        tableViewer.show(text: text, title: ClipPreview.title(text, maxLength: 60), format: modes.current.numberFormat)
     }
 
     /// Menu bar → "Visualize Clipboard JSON": draws whatever JSON is on the clipboard now.

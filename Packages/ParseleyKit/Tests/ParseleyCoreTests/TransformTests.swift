@@ -278,7 +278,7 @@ private func run(_ t: some Transform, _ input: String) throws -> String {
         let ids = TransformRegistry.all.map(\.id)
         #expect(Set(ids).count == ids.count)
         #expect(ids == ["list.comma", "sql.in", "json.array", "sort.asc", "sort.desc",
-                        "list.dedupe", "text.clean", "number.plain"])
+                        "list.dedupe", "text.clean", "number.plain", "paste.column", "paste.row", "table.transpose"])
     }
 
     @Test func lookupByID() {

@@ -21,6 +21,8 @@ struct SettingsView: View {
                 .tabItem { Label("Modes", systemImage: "square.stack.3d.up") }
             RecipeSettings(recipes: env.recipes)
                 .tabItem { Label("Recipes", systemImage: "wand.and.stars") }
+            SnippetSettings(snippets: env.snippets)
+                .tabItem { Label("Snippets", systemImage: "text.badge.plus") }
             SeriesSettings(settings: settings)
                 .tabItem { Label("Series", systemImage: "sum") }
         }
@@ -35,6 +37,7 @@ struct SettingsView: View {
 // MARK: - General
 
 private struct GeneralSettings: View {
+    static let currencies = NumberUnits.currencyCodes.sorted()
     @Bindable var settings: AppSettings
     let env: AppEnvironment
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -66,6 +69,28 @@ private struct GeneralSettings: View {
                     }
                 }
                 Text("Pinned clips are always kept and don't count toward the limit.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Currencies") {
+                Picker("Convert totals to:", selection: $settings.baseCurrency) {
+                    ForEach(Self.currencies, id: \.self) { Text($0).tag($0) }
+                }
+                DisclosureGroup("Exchange rates (\(settings.parsedRates.count) set)") {
+                    ForEach(Self.currencies.filter { $0 != settings.baseCurrency }, id: \.self) { code in
+                        HStack {
+                            Text(verbatim: "1 \(code) =").monospacedDigit().frame(width: 70, alignment: .leading)
+                            TextField("rate", text: Binding(
+                                get: { settings.exchangeRates[code] ?? "" },
+                                set: { settings.exchangeRates[code] = $0.isEmpty ? nil : $0 }
+                            ))
+                            .frame(width: 100)
+                            Text(verbatim: settings.baseCurrency).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Text("When a clip mixes currencies, Parseley shows each sum separately, plus the total in your currency if every rate is set. Rates are yours to enter: Parseley never goes online.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -468,5 +493,89 @@ private struct RecipeEditor: View {
         let target = index + delta
         guard recipe.steps.indices.contains(target) else { return }
         recipe.steps.swapAt(index, target)
+    }
+}
+
+// MARK: - Snippets
+
+private struct SnippetSettings: View {
+    let snippets: SnippetController
+    @State private var selectedID: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                List(selection: $selectedID) {
+                    ForEach(snippets.snippets) { snippet in
+                        Label(snippet.name, systemImage: "text.badge.plus").tag(snippet.id)
+                    }
+                }
+                .frame(width: 180, height: 320)
+                HStack(spacing: 6) {
+                    Button { selectedID = snippets.addSnippet().id } label: { Image(systemName: "plus") }
+                    Button {
+                        if let id = selectedID { snippets.remove(id: id) }
+                        selectedID = nil
+                    } label: { Image(systemName: "minus") }
+                    .disabled(selectedID == nil)
+                }
+                Text("Use a snippet from the > command bar: type >snippet or its name.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 180, alignment: .leading)
+            }
+            if let id = selectedID, snippets.snippet(id: id) != nil {
+                SnippetEditor(snippet: snippets.binding(for: id)).id(id)
+            } else {
+                Text("Select a snippet").foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            }
+        }
+        .onAppear { if selectedID == nil { selectedID = snippets.snippets.first?.id } }
+    }
+}
+
+private struct SnippetEditor: View {
+    @Binding var snippet: Snippet
+    @State private var sample = "3\n1\n2"
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Name:", text: $snippet.name)
+            }
+            Section("Template") {
+                TextEditor(text: $snippet.body)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(height: 90)
+                Text("{clipboard} is the selected clip; {anything} is a field you fill in. Pipe through transforms with | : {clipboard|text.clean|sql.in}. Write {{ and }} for literal braces.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !snippet.fields.isEmpty {
+                    Text("Fields: " + snippet.fields.joined(separator: ", "))
+                        .font(.caption)
+                }
+            }
+            Section("Try it (sample clipboard)") {
+                TextEditor(text: $sample)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(height: 50)
+                Text(verbatim: preview)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var preview: String {
+        let values = Dictionary(uniqueKeysWithValues: snippet.fields.map { ($0, "<\($0)>") })
+        do {
+            return try snippet.render(clipboard: sample, values: values)
+        } catch let error as Snippet.RenderError {
+            return "⚠ " + error.message
+        } catch {
+            return "⚠ \(error)"
+        }
     }
 }

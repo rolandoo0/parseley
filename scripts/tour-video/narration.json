@@ -12,7 +12,7 @@
     {"start": 46.5, "end": 55.0, "text": "Filling in a form? Select a few clips, queue them, and paste them one by one with the same shortcut."},
     {"start": 55.0, "end": 61.0, "text": "Modes adapt to the app you're in: Finance in Excel, sequel in your database tool."},
     {"start": 61.0, "end": 67.0, "text": "Copied a spreadsheet range? Pick a column to see just its stats."},
-    {"start": 67.0, "end": 75.0, "text": "Copied some JSON? Press Command J to see it as a graph. Long lists show their first and last five, and you can copy any path."},
+    {"start": 67.0, "end": 75.0, "text": "Copied some JSON? Press Command J to see it as a graph. Long lists show their first five, and you can expand the rest or copy any path."},
     {"start": 75.0, "end": 81.5, "text": "In the terminal there's a parseley command, and an M C P server, so Claude can use it too."},
     {"start": 81.5, "end": 87.0, "text": "And everything stays on your Mac. No network. No accounts."},
     {"start": 87.0, "end": 94.0, "text": "That's Parseley. Change any shortcut in Settings, and happy copying."}

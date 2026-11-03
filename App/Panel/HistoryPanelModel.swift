@@ -123,12 +123,12 @@ final class HistoryPanelModel {
     /// Every number in the selection (in order), with units. Empty when numbers are hidden.
     var selectionNumbers: [ParsedNumber] {
         guard mode.showsNumbers else { return [] }
-        if multi.isActive { return selectedClips.flatMap { numbers(in: $0) } }
+        if multi.isActive { return selectedClips.flatMap { self.numbers(in: $0) } }
         if let column = selectedColumn, let table = selectedTable, table.columns.indices.contains(column),
            let clip = selectedClip, let data = DataTable.parse(clip.content, format: format), column < data.columnCount {
             return data.numbers(in: column, format: format)
         }
-        return selectedClip.map { numbers(in: $0) } ?? []
+        return selectedClip.map { self.numbers(in: $0) } ?? []
     }
 
     /// Mixed units ("$1,204.50 + €380"), and the total in the base currency when rates
@@ -512,9 +512,9 @@ final class HistoryPanelModel {
     // MARK: Table viewer, Quick Look, drag
 
     private func unitSummaryFor(_ clips: [Clip]) -> (sums: String, converted: String?)? {
-        let numbers = clips.flatMap { numbers(in: $0) }
-        guard numbers.count >= 2 else { return nil }
-        let breakdown = UnitBreakdown(numbers)
+        let found = clips.flatMap { self.numbers(in: $0) }
+        guard found.count >= 2 else { return nil }
+        let breakdown = UnitBreakdown(found)
         let (base, rates) = currencyRates()
         let converted = breakdown.converted(to: base, rates: rates).map { UnitBreakdown.display($0, unit: base, format: format) }
         guard breakdown.isMixed || (converted != nil && breakdown.units != [base]) else { return nil }
@@ -522,7 +522,7 @@ final class HistoryPanelModel {
     }
 
     private func insightsFor(_ clips: [Clip]) -> NumberInsights? {
-        let values = clips.flatMap { numbers(in: $0) }.map(\.value)
+        let values = clips.flatMap { self.numbers(in: $0) }.map(\.value)
         guard values.count >= NumberInsights.minimumForGaps else { return nil }
         let insights = NumberInsights(values: values)
         return insights.isEmpty ? nil : insights

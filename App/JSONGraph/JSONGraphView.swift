@@ -375,7 +375,7 @@ private struct Inspector: View {
             }
             if node.kind == .array, JSONGraph.isLong(node.childCount), !node.isCollapsed {
                 if model.isShowingAll(node.path) {
-                    TransformChip(title: "Show first & last \(JSONGraph.listEdge)", icon: "rectangle.compress.vertical") {
+                    TransformChip(title: "Show first \(JSONGraph.listEdge)", icon: "rectangle.compress.vertical") {
                         model.shorten(node.path)
                     }
                 } else {

@@ -85,11 +85,11 @@ public struct JSONGraph: Sendable {
     /// - Parameters:
     ///   - collapsed: paths of cards whose children are hidden.
     ///   - maxNodes: stop adding cards after this many (huge documents stay responsive).
-    /// Long lists show their first and last `listEdge` items with a "… N more" card in
-    /// between, unless their path is in `expanded`. Lists up to `listLimit` items are
+    /// Long lists show their first `listEdge` items and a "… N more" card for the rest,
+    /// unless their path is in `expanded`. Lists up to `listLimit` items are
     /// always shown in full (hiding one or two items wouldn't help).
     public static let listEdge = 5
-    public static let listLimit = 12
+    public static let listLimit = 6
 
     /// True for a list long enough to be shortened.
     public static func isLong(_ count: Int) -> Bool { count > listLimit }
@@ -145,7 +145,7 @@ public struct JSONGraph: Sendable {
             case .array(let elements):
                 let shortened = isLong(elements.count) && !expanded.contains(path)
                 for (i, element) in elements.enumerated() {
-                    let isHidden = shortened && i >= listEdge && i < elements.count - listEdge
+                    let isHidden = shortened && i >= listEdge
                     if isHidden, contains(element) { result.insert(path) }
                     if element.isContainer { walk(element, path: "\(path)[\(i)]") }
                 }
@@ -264,9 +264,9 @@ public struct JSONGraph: Sendable {
                             childCount: elements.count, isCollapsed: isCollapsed, parent: parent, depth: depth),
                        edgeLabel: edgeLabel)
                 guard !isCollapsed else { return }
-                // Long list: first and last few, with a card for the hidden middle.
+                // Long list: the first few, then one card standing in for the rest.
                 let shorten = JSONGraph.isLong(elements.count) && !expanded.contains(path)
-                let hidden = shorten ? JSONGraph.listEdge..<(elements.count - JSONGraph.listEdge) : 0..<0
+                let hidden = shorten ? JSONGraph.listEdge..<elements.count : 0..<0
                 for (i, element) in elements.enumerated() {
                     if hidden.contains(i) {
                         guard i == hidden.lowerBound, nodes.count < maxNodes else { continue }

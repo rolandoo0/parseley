@@ -139,20 +139,19 @@ struct JSONGraphTests {
         #expect(JSONGraph.value(at: "$.missing", in: doc) == nil)
     }
 
-    @Test func longListsShowFirstAndLastFive() throws {
+    @Test func longListsShowTheFirstFive() throws {
         let doc = try JSONValue.parse("{\"rows\": [" + (0..<100).map { "{\"id\": \($0)}" }.joined(separator: ",") + "]}")
         let graph = JSONGraph(doc)
         let rows = graph.nodes.first { $0.path == "$.rows" }!
         #expect(rows.childCount == 100)
         let children = graph.edges.filter { $0.from == rows.id }.map { graph.nodes[$0.to] }
         #expect(children.map(\.path) == ["$.rows[0]", "$.rows[1]", "$.rows[2]", "$.rows[3]", "$.rows[4]",
-                                          "$.rows[5…94]",
-                                          "$.rows[95]", "$.rows[96]", "$.rows[97]", "$.rows[98]", "$.rows[99]"])
+                                          "$.rows[5…99]"])
         let more = children[5]
         #expect(more.kind == .more)
         #expect(more.expands == "$.rows")
-        #expect(more.rows.first?.value == "… 90 more")
-        #expect(graph.edges.first { $0.to == more.id }?.label == "5–94")
+        #expect(more.rows.first?.value == "… 95 more")
+        #expect(graph.edges.first { $0.to == more.id }?.label == "5–99")
         // Hidden in the middle, but still laid out without overlaps.
         for a in children { for b in children where b.id > a.id { #expect(!a.frame.intersects(b.frame)) } }
 
@@ -175,7 +174,8 @@ struct JSONGraphTests {
         #expect(JSONGraph.listsHidingMatches("NEEDLE", in: doc) == ["$.users"])
         #expect(JSONGraph.listsHidingMatches("user2", in: doc) == ["$.users"])      // user2, user20…
         #expect(JSONGraph.listsHidingMatches("user1", in: doc) == ["$.users"])
-        #expect(JSONGraph.listsHidingMatches("user39", in: doc).isEmpty)           // last five are visible
+        #expect(JSONGraph.listsHidingMatches("user39", in: doc) == ["$.users"])
+        #expect(JSONGraph.listsHidingMatches("user4", in: doc).isEmpty)            // first five are visible
         #expect(JSONGraph.listsHidingMatches("needle", in: doc, expanded: ["$.users"]).isEmpty)
         #expect(JSONGraph.listsHidingMatches("", in: doc).isEmpty)
     }

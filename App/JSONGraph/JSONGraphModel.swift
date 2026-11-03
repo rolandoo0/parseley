@@ -88,7 +88,13 @@ final class JSONGraphModel {
 
     func toggleCollapse(_ id: Int) {
         guard let node = graph?.nodes.first(where: { $0.id == id }), node.childCount > 0 else { return }
-        if collapsed.contains(node.path) { collapsed.remove(node.path) } else { collapsed.insert(node.path) }
+        if collapsed.contains(node.path) {
+            // Expanding always starts from the default view: long lists show their first 5.
+            collapsed.remove(node.path)
+            resetLists(under: node.path)
+        } else {
+            collapsed.insert(node.path)
+        }
         rebuild()
     }
 
@@ -122,6 +128,7 @@ final class JSONGraphModel {
 
     func expandAll() {
         collapsed = []
+        expandedLists = []
         rebuild()
         fit()
     }
@@ -132,8 +139,17 @@ final class JSONGraphModel {
         let full = JSONGraph(root)
         collapsed = Set(full.nodes.filter { $0.depth == 1 && $0.childCount > 0 }.map(\.path))
         if full.nodes.first?.kind == .array { collapsed.insert("$") }
+        expandedLists = []   // the next expand shows the default view (first 5)
         rebuild()
         fit()
+    }
+
+    /// Back to the default for this card and everything inside it: long lists show their
+    /// first 5 again.
+    private func resetLists(under path: String) {
+        expandedLists = expandedLists.filter { list in
+            !(list == path || list.hasPrefix(path + ".") || list.hasPrefix(path + "["))
+        }
     }
 
     func nextMatch(_ step: Int = 1) {

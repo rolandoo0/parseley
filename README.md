@@ -176,11 +176,11 @@ clipboard. It opens a graph window:
 - click a card's ± handle (or double-click the card) to collapse or expand it;
   **Collapse all** / **Expand all** in the toolbar; very large documents open with
   deeper levels collapsed;
-- long lists (more than 12 items) show their first and last 5 with a dashed
-  **… N more** card between them: click it to show every item, and **Show first & last 5**
-  in the inspector to shorten it again;
+- lists of more than 6 items show their first 5 and a dashed **… N more** card: click
+  it to show the rest, and **Show first 5** in the inspector to shorten it again. This is
+  the default view: expanding a collapsed card (or **Expand all**) shows the first 5 again;
 - ⌘F searches keys and values (↩ jumps to the next match), including items hidden in the
-  middle of a long list (that list opens to show them).
+  rest of a long list (that list opens to show them).
 
 Key order and numbers are kept exactly as written (`1.10` stays `1.10`). Invalid JSON
 shows where the error is (line and column). Everything runs locally.

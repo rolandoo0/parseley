@@ -18,9 +18,8 @@
 #   PARSELEY_NO_OPEN=1         don't open the app afterwards
 #   PARSELEY_DMG / PARSELEY_CLI_ZIP   install from local files (used by CI)
 #
-# Uninstall: quit Parseley, then
-#   rm -rf /Applications/Parseley.app "$(command -v parseley)"
-#   rm -rf ~/Library/Application\ Support/Parseley    # your clipboard history
+# Uninstall: Settings → General → Uninstall Parseley…, or
+#   curl -fsSL https://raw.githubusercontent.com/rolandoo0/parseley/main/scripts/uninstall.sh | bash
 set -euo pipefail
 
 REPO="rolandoo0/parseley"
@@ -130,6 +129,7 @@ say "Parseley $version is installed."
 note "It lives in the menu bar (no Dock icon). Press ⌘⇧V to open your clipboard history."
 note "For auto-paste, allow Parseley in System Settings → Privacy & Security → Accessibility."
 note "After an update, turn that switch off and on again if auto-paste stops working."
+note "To uninstall: Settings → General → Uninstall…"
 if [ -z "${PARSELEY_NO_OPEN:-}" ]; then
   open "$app_dir/$APP_NAME"
 fi

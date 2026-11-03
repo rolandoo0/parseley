@@ -20,7 +20,7 @@ on:
     tags: ["v*"]
   # Dry run (build + package, no release) whenever a PR changes this workflow.
   pull_request:
-    paths: [".github/workflows/release.yml", "scripts/install.sh", "project.yml", "Config/**"]
+    paths: [".github/workflows/release.yml", "scripts/install.sh", "scripts/uninstall.sh", "project.yml", "Config/**"]
   workflow_dispatch:
 
 permissions:
@@ -136,6 +136,10 @@ jobs:
             bash scripts/install.sh
           codesign --verify --deep --strict "$RUNNER_TEMP/Applications/Parseley.app"
           printf '1\n2\n3.5\n' | "$RUNNER_TEMP/bin/parseley" sum
+          # …and uninstall it again.
+          PARSELEY_APP_DIR="$RUNNER_TEMP/Applications" PARSELEY_BIN_DIR="$RUNNER_TEMP/bin" PARSELEY_KEEP_HISTORY=1 \
+            bash scripts/uninstall.sh
+          test ! -e "$RUNNER_TEMP/Applications/Parseley.app" && test ! -e "$RUNNER_TEMP/bin/parseley"
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')

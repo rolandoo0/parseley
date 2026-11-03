@@ -30,9 +30,16 @@ guide with a 90-second video. Press ⌘⇧V for your clipboard history. For auto
 allow Parseley under **System Settings → Privacy & Security → Accessibility**. After an
 update, if auto-paste stops working, switch it off and on again there.
 
-**Uninstall:** quit Parseley from the menu bar, then
-`rm -rf /Applications/Parseley.app "$(command -v parseley)"`. Your history is in
-`~/Library/Application Support/Parseley` (delete it too to remove everything).
+**Uninstall:** in Parseley, open **Settings → General → Uninstall…**, or paste this into
+Terminal:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rolandoo0/parseley/main/scripts/uninstall.sh | bash
+```
+
+Either way removes the app, the `parseley` command, settings, the login item and the
+Accessibility entry, and asks whether to delete your clipboard history too (kept in
+`~/Library/Application Support/Parseley` otherwise).
 
 ## Build from source
 

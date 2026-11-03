@@ -91,6 +91,19 @@ private struct GeneralSettings: View {
                     Button("Clear History…", role: .destructive) { confirmingClear = true }
                 }
             }
+
+            Section {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Uninstall Parseley")
+                        Text("Removes the app, the parseley command, settings and permissions.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Uninstall…", role: .destructive) { Uninstaller.confirmAndUninstall() }
+                }
+            }
         }
         .formStyle(.grouped)
         .confirmationDialog("Clear clipboard history?", isPresented: $confirmingClear) {

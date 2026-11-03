@@ -14,6 +14,10 @@ final class JSONGraphModel {
 
     private(set) var graph: JSONGraph?
     private(set) var collapsed: Set<String> = []
+    /// Long lists the user chose to see in full (others show their first and last 5).
+    private(set) var expandedLists: Set<String> = []
+    /// Long lists opened because the search matches something in their hidden middle.
+    @ObservationIgnored private var searchExpandedLists: Set<String> = []
     /// The selected card, by path (paths survive collapsing/expanding; ids don't).
     private(set) var selectedPath: String?
     var query = "" {
@@ -86,6 +90,34 @@ final class JSONGraphModel {
         guard let node = graph?.nodes.first(where: { $0.id == id }), node.childCount > 0 else { return }
         if collapsed.contains(node.path) { collapsed.remove(node.path) } else { collapsed.insert(node.path) }
         rebuild()
+    }
+
+    /// Clicking a "… N more" card shows the whole list.
+    func showAll(_ listPath: String) {
+        expandedLists.insert(listPath)
+        rebuild()
+    }
+
+    /// Back to first and last 5 for a long list.
+    func shorten(_ listPath: String) {
+        expandedLists.remove(listPath)
+        searchExpandedLists.remove(listPath)
+        rebuild()
+    }
+
+    func isShowingAll(_ listPath: String) -> Bool {
+        expandedLists.contains(listPath) || searchExpandedLists.contains(listPath)
+    }
+
+    /// A click on the canvas: "… N more" shows the list, the ± handle collapses, anything
+    /// else selects (or clears the selection on empty space).
+    func tap(at point: CGPoint) {
+        guard let hit = hit(at: point) else { return select(nil) }
+        if hit.onToggle { return toggleCollapse(hit.id) }
+        if let node = graph?.nodes.first(where: { $0.id == hit.id }), let list = node.expands {
+            return showAll(list)
+        }
+        select(hit.id)
     }
 
     func expandAll() {
@@ -170,12 +202,25 @@ final class JSONGraphModel {
     // MARK: - Private
 
     private func rebuild() {
-        guard let root else { return }
-        graph = JSONGraph(root, collapsed: collapsed)
+        layoutGraph()
         updateMatches(focusFirst: false)
     }
 
+    private func layoutGraph() {
+        guard let root else { return }
+        graph = JSONGraph(root, collapsed: collapsed, expanded: expandedLists.union(searchExpandedLists))
+    }
+
     private func updateMatches(focusFirst: Bool) {
+        // Open long lists whose hidden middle has a match, so search finds everything.
+        if let root {
+            let needed = query.trimmingCharacters(in: .whitespaces).count >= 2
+                ? JSONGraph.listsHidingMatches(query, in: root, expanded: expandedLists) : []
+            if needed != searchExpandedLists {
+                searchExpandedLists = needed
+                layoutGraph()
+            }
+        }
         matches = graph?.search(query) ?? []
         matchIndex = 0
         if focusFirst, let first = matches.first { focus(on: first) }

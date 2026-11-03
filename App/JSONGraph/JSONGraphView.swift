@@ -160,10 +160,7 @@ private struct GraphCanvas: View {
                 SpatialTapGesture(count: 2).onEnded { value in
                     if let hit = model.hit(at: value.location) { model.toggleCollapse(hit.id) }
                 }
-                .exclusively(before: SpatialTapGesture().onEnded { value in
-                    let hit = model.hit(at: value.location)
-                    if let hit, hit.onToggle { model.toggleCollapse(hit.id) } else { model.select(hit?.id) }
-                })
+                .exclusively(before: SpatialTapGesture().onEnded { value in model.tap(at: value.location) })
             )
             .overlay(alignment: .bottomLeading) { Legend().padding(14) }
             .onAppear { report(proxy) }
@@ -239,7 +236,13 @@ private struct GraphCanvas: View {
             context.fill(shape, with: .color(Self.cardFill))
             if isSelected { context.fill(shape, with: .color(Theme.cyan.opacity(0.14))) }
             let border: Color = isSelected ? Theme.cyan : matches.contains(node.id) ? Theme.amber : .white.opacity(0.16)
-            context.stroke(shape, with: .color(border), lineWidth: isSelected || matches.contains(node.id) ? 2 : 1)
+            if node.kind == .more {
+                // "… N more": dashed, so it reads as a placeholder you can click.
+                context.stroke(shape, with: .color(Theme.cyan.opacity(0.55)),
+                               style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
+            } else {
+                context.stroke(shape, with: .color(border), lineWidth: isSelected || matches.contains(node.id) ? 2 : 1)
+            }
 
             if detailed {
                 context.drawLayer { layer in
@@ -368,6 +371,17 @@ private struct Inspector: View {
                 if node.childCount > 0 {
                     TransformChip(title: node.isCollapsed ? "Expand" : "Collapse",
                                   icon: node.isCollapsed ? "plus.circle" : "minus.circle") { model.toggleCollapse(node.id) }
+                }
+            }
+            if node.kind == .array, JSONGraph.isLong(node.childCount), !node.isCollapsed {
+                if model.isShowingAll(node.path) {
+                    TransformChip(title: "Show first & last \(JSONGraph.listEdge)", icon: "rectangle.compress.vertical") {
+                        model.shorten(node.path)
+                    }
+                } else {
+                    TransformChip(title: "Show all \(node.childCount)", icon: "rectangle.expand.vertical") {
+                        model.showAll(node.path)
+                    }
                 }
             }
 

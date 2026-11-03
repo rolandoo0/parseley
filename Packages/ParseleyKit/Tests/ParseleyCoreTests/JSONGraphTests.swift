@@ -107,7 +107,7 @@ struct JSONGraphTests {
 
     @Test func capsHugeDocuments() throws {
         let big = try JSONValue.parse("[" + (0..<5_000).map { "{\"i\":\($0)}" }.joined(separator: ",") + "]")
-        let graph = JSONGraph(big, maxNodes: 100)
+        let graph = JSONGraph(big, expanded: ["$"], maxNodes: 100)
         #expect(graph.isTruncated)
         #expect(graph.nodes.count <= 101)
         #expect(graph.nodes.last?.kind == .more)
@@ -137,6 +137,47 @@ struct JSONGraphTests {
         #expect(JSONGraph.value(at: deepest.path, in: doc) == .object([JSONMember("x", .string("y"))]))
         #expect(JSONGraph.value(at: "$", in: doc) == doc)
         #expect(JSONGraph.value(at: "$.missing", in: doc) == nil)
+    }
+
+    @Test func longListsShowFirstAndLastFive() throws {
+        let doc = try JSONValue.parse("{\"rows\": [" + (0..<100).map { "{\"id\": \($0)}" }.joined(separator: ",") + "]}")
+        let graph = JSONGraph(doc)
+        let rows = graph.nodes.first { $0.path == "$.rows" }!
+        #expect(rows.childCount == 100)
+        let children = graph.edges.filter { $0.from == rows.id }.map { graph.nodes[$0.to] }
+        #expect(children.map(\.path) == ["$.rows[0]", "$.rows[1]", "$.rows[2]", "$.rows[3]", "$.rows[4]",
+                                          "$.rows[5…94]",
+                                          "$.rows[95]", "$.rows[96]", "$.rows[97]", "$.rows[98]", "$.rows[99]"])
+        let more = children[5]
+        #expect(more.kind == .more)
+        #expect(more.expands == "$.rows")
+        #expect(more.rows.first?.value == "… 90 more")
+        #expect(graph.edges.first { $0.to == more.id }?.label == "5–94")
+        // Hidden in the middle, but still laid out without overlaps.
+        for a in children { for b in children where b.id > a.id { #expect(!a.frame.intersects(b.frame)) } }
+
+        let full = JSONGraph(doc, expanded: ["$.rows"])
+        #expect(full.nodes.filter { $0.parent == rows.id }.count == 100)
+        #expect(!full.nodes.contains { $0.kind == .more })
+    }
+
+    @Test func shortListsAreShownInFull() throws {
+        let doc = try JSONValue.parse("[" + (0..<JSONGraph.listLimit).map(String.init).joined(separator: ",") + "]")
+        let graph = JSONGraph(doc)
+        #expect(graph.nodes.count == 1 + JSONGraph.listLimit)
+        #expect(!graph.nodes.contains { $0.kind == .more })
+    }
+
+    @Test func searchFindsListsHidingMatches() throws {
+        let doc = try JSONValue.parse("{\"users\": [" + (0..<40).map { "{\"name\": \"user\($0)\", \"tags\": [\($0 == 20 ? "\"needle\"" : "\"x\"")]}" }
+            .joined(separator: ",") + "]}")
+        #expect(JSONGraph.listsHidingMatches("needle", in: doc) == ["$.users"])
+        #expect(JSONGraph.listsHidingMatches("NEEDLE", in: doc) == ["$.users"])
+        #expect(JSONGraph.listsHidingMatches("user2", in: doc) == ["$.users"])      // user2, user20…
+        #expect(JSONGraph.listsHidingMatches("user1", in: doc) == ["$.users"])
+        #expect(JSONGraph.listsHidingMatches("user39", in: doc).isEmpty)           // last five are visible
+        #expect(JSONGraph.listsHidingMatches("needle", in: doc, expanded: ["$.users"]).isEmpty)
+        #expect(JSONGraph.listsHidingMatches("", in: doc).isEmpty)
     }
 
     @Test func primitiveRootIsASingleCard() throws {

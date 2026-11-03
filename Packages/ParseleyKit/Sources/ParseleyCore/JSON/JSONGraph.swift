@@ -31,6 +31,9 @@ public struct JSONGraph: Sendable {
         public let isCollapsed: Bool
         public let parent: Int?
         public let depth: Int
+        /// For a "… N more" card that stands in for the middle of a long list: the list's
+        /// path (show it in full with `expanded`). Nil for every other card.
+        public var expands: String? = nil
         public var frame: Rect = .zero
     }
 
@@ -82,9 +85,19 @@ public struct JSONGraph: Sendable {
     /// - Parameters:
     ///   - collapsed: paths of cards whose children are hidden.
     ///   - maxNodes: stop adding cards after this many (huge documents stay responsive).
-    public init(_ root: JSONValue, collapsed: Set<String> = [], maxNodes: Int = 2_000,
-                metrics: Metrics = Metrics()) {
-        var builder = Builder(collapsed: collapsed, maxNodes: maxNodes)
+    /// Long lists show their first and last `listEdge` items with a "… N more" card in
+    /// between, unless their path is in `expanded`. Lists up to `listLimit` items are
+    /// always shown in full (hiding one or two items wouldn't help).
+    public static let listEdge = 5
+    public static let listLimit = 12
+
+    /// True for a list long enough to be shortened.
+    public static func isLong(_ count: Int) -> Bool { count > listLimit }
+
+    ///   - expanded: paths of long lists to show in full.
+    public init(_ root: JSONValue, collapsed: Set<String> = [], expanded: Set<String> = [],
+                maxNodes: Int = 2_000, metrics: Metrics = Metrics()) {
+        var builder = Builder(collapsed: collapsed, expanded: expanded, maxNodes: maxNodes)
         builder.add(root, path: "$", title: nil, parent: nil, edgeLabel: nil, depth: 0)
         nodes = builder.nodes
         edges = builder.edges
@@ -100,6 +113,48 @@ public struct JSONGraph: Sendable {
             if (node.title ?? "").lowercased().contains(q) { return true }
             return node.rows.contains { ($0.key ?? "").lowercased().contains(q) || $0.value.lowercased().contains(q) }
         }.map(\.id)
+    }
+
+    /// Paths of long lists (shown shortened) that hide an item matching `query`, so a
+    /// search can open them up. Matches keys and plain values, case-insensitive.
+    public static func listsHidingMatches(_ query: String, in root: JSONValue,
+                                          expanded: Set<String> = []) -> Set<String> {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return [] }
+        var result: Set<String> = []
+
+        func contains(_ value: JSONValue) -> Bool {
+            switch value {
+            case .object(let members):
+                return members.contains { $0.key.lowercased().contains(q) || contains($0.value) }
+            case .array(let elements):
+                return elements.contains(where: contains)
+            case .string(let text): return text.lowercased().contains(q)
+            case .number(let text): return text.contains(q)
+            case .bool(let flag): return (flag ? "true" : "false").contains(q)
+            case .null: return "null".contains(q)
+            }
+        }
+
+        func walk(_ value: JSONValue, path: String) {
+            switch value {
+            case .object(let members):
+                for member in members where member.value.isContainer {
+                    walk(member.value, path: appending(member.key, to: path))
+                }
+            case .array(let elements):
+                let shortened = isLong(elements.count) && !expanded.contains(path)
+                for (i, element) in elements.enumerated() {
+                    let isHidden = shortened && i >= listEdge && i < elements.count - listEdge
+                    if isHidden, contains(element) { result.insert(path) }
+                    if element.isContainer { walk(element, path: "\(path)[\(i)]") }
+                }
+            default:
+                break
+            }
+        }
+        walk(root, path: "$")
+        return result
     }
 
     /// The value at a path built by this graph (`$`, `$.a[0].b`), for copying.
@@ -171,6 +226,7 @@ public struct JSONGraph: Sendable {
 
     private struct Builder {
         let collapsed: Set<String>
+        let expanded: Set<String>
         let maxNodes: Int
         var nodes: [Node] = []
         var edges: [Edge] = []
@@ -208,7 +264,23 @@ public struct JSONGraph: Sendable {
                             childCount: elements.count, isCollapsed: isCollapsed, parent: parent, depth: depth),
                        edgeLabel: edgeLabel)
                 guard !isCollapsed else { return }
+                // Long list: first and last few, with a card for the hidden middle.
+                let shorten = JSONGraph.isLong(elements.count) && !expanded.contains(path)
+                let hidden = shorten ? JSONGraph.listEdge..<(elements.count - JSONGraph.listEdge) : 0..<0
                 for (i, element) in elements.enumerated() {
+                    if hidden.contains(i) {
+                        guard i == hidden.lowerBound, nodes.count < maxNodes else { continue }
+                        let more = nodes.count
+                        var node = Node(id: more, kind: .more, path: "\(path)[\(hidden.lowerBound)…\(hidden.upperBound - 1)]",
+                                        title: nil,
+                                        rows: [Row(key: nil, value: "… \(hidden.count) more", kind: .null),
+                                               Row(key: nil, value: "click to show all", kind: .null)],
+                                        childCount: 0, isCollapsed: false, parent: id, depth: depth + 1)
+                        node.expands = path
+                        nodes.append(node)
+                        edges.append(Edge(from: id, to: more, label: "\(hidden.lowerBound)–\(hidden.upperBound - 1)"))
+                        continue
+                    }
                     guard nodes.count < maxNodes else {
                         truncated = true
                         let rest = elements.count - i

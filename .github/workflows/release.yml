@@ -149,6 +149,7 @@ jobs:
             Parseley-${{ steps.version.outputs.version }}.dmg
             parseley-cli-${{ steps.version.outputs.version }}.zip
             SHA256SUMS.txt
+            App/Resources/ParseleyTour.mp4
           generate_release_notes: true
           # Versions like 0.2.0-beta.1 are marked as pre-releases (the installer skips them).
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}

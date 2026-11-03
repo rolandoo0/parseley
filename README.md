@@ -7,6 +7,33 @@ analytics. Free and open source (MIT).
 
 [![CI](https://github.com/rolandoo0/parseley/actions/workflows/ci.yml/badge.svg)](https://github.com/rolandoo0/parseley/actions/workflows/ci.yml)
 
+<p align="center">
+  <a href="App/Resources/ParseleyTour.mp4"><img src="docs/tour-preview.gif" width="720" alt="Parseley: history with stats, the command bar, a running series and the JSON graph"></a>
+  <br>
+  <a href="App/Resources/ParseleyTour.mp4"><b>▶ Watch the full tour</b></a> (100 seconds, with narration)
+</p>
+
+## Features at a glance
+
+- **Clipboard history** (⌘⇧V): every copy kept, searchable, pinnable; Quick Look (Space)
+  and drag-and-drop into any app.
+- **Numbers with the math done:** sum, average, median, count, min and max for every
+  copy (⌘1–⌘6 copy them), a sparkline, outliers and gaps in sequences, per-column stats
+  for spreadsheet ranges.
+- **Units and currencies:** `$`, `€`, `USD`, `%`, `kg`, `MB`… are recognised; mixed units
+  are summed separately and converted with your own exchange rates.
+- **Command bar** (`>`): `>sum`, quick math (`>× 1.2`, `>+ 15%`, `>round 2`), transforms
+  (SQL IN, JSON array, sort, dedupe, clean up), paste as column / row / transposed,
+  snippets with fields, modes, series.
+- **Series:** a running total of everything you copy, across apps; ⌃⌥⌘V pastes the total.
+- **Paste queue:** pick clips, then paste them one by one.
+- **Modes and recipes:** behaviour per app (Finance in Excel, SQL in your database tool)
+  and saved chains of transforms.
+- **Viewers:** JSON as an interactive graph (⌘J) and CSV/TSV as a sortable, filterable
+  table (⌘T).
+- **Terminal and AI:** the `parseley` command and an MCP server for Claude.
+- **Private:** no network, no accounts, no analytics. MIT licensed.
+
 ## Install
 
 Requires macOS 14 Sonoma or later (Apple silicon or Intel). Paste this into Terminal:

@@ -26,7 +26,7 @@ open it macOS says it can't verify the developer: open **System Settings → Pri
 Security**, scroll down and click **Open Anyway** (once).
 
 **First run:** Parseley lives in the menu bar (no Dock icon) and opens a short welcome
-guide with a 90-second video. Press ⌘⇧V for your clipboard history. For auto-paste,
+guide with a short video. Press ⌘⇧V for your clipboard history. For auto-paste,
 allow Parseley under **System Settings → Privacy & Security → Accessibility**. After an
 update, if auto-paste stops working, switch it off and on again there.
 
@@ -189,7 +189,7 @@ shows where the error is (line and column). Everything runs locally.
 
 The welcome guide (menu bar → Welcome Guide…) has a "Watch the tour" button (also menu
 bar → Watch the Tour Video) that plays
-`App/Resources/ParseleyTour.mp4`, a 90-second walkthrough of every feature. The video is
+`App/Resources/ParseleyTour.mp4`, a walkthrough of every feature (under 2 minutes). The video is
 generated from `scripts/tour-video/tour.html`; after changing a feature, edit the scene
 and rebuild (needs Playwright, ffmpeg and numpy):
 

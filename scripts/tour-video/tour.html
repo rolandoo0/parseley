@@ -36,7 +36,14 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 .row.multi{background:rgba(158,140,255,.16);outline:1px solid rgba(158,140,255,.5)}
 .badge{font-size:9.5px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:999px;min-width:62px;text-align:center}
 .b-text{color:#cfd3e3;background:rgba(255,255,255,.1)}.b-link{color:#b9adff;background:rgba(158,140,255,.16)}
-.b-num{color:#5ee7ff;background:rgba(94,231,255,.14)}.b-tot{color:#5cffb3;background:rgba(92,255,179,.14)}.b-tab{color:#5cffb3;background:rgba(92,255,179,.12)}
+.b-num{color:#5ee7ff;background:rgba(94,231,255,.14)}.b-json{color:#ffc45c;background:rgba(255,196,92,.14)}
+.gcard{position:absolute;border-radius:10px;background:#12192e;border:1px solid rgba(255,255,255,.16);font-family:Menlo,monospace;font-size:13px;padding:6px 12px;box-sizing:border-box;white-space:nowrap;overflow:hidden}
+.gcard .r{height:22px;line-height:22px}.gk{color:#c7bfff}.gs{color:#5cffb3}.gn{color:#5ee7ff}.gb{color:#ffc45c}.gd{color:rgba(255,255,255,.45)}
+.gcard.sel{border:2px solid #5ee7ff;background:#14243a}.gcard.more{border:1.2px dashed rgba(94,231,255,.6);background:#0f1628}
+.gtitle{font-weight:700;color:#fff;height:22px;line-height:22px;border-bottom:1px solid rgba(255,255,255,.1);margin:0 -12px 4px;padding:0 12px}
+.handle{position:absolute;width:18px;height:18px;border-radius:9px;border:1.2px solid rgba(94,231,255,.8);background:#12192e;color:#5ee7ff;font:700 11px -apple-system,sans-serif;display:flex;align-items:center;justify-content:center}
+.elabel{position:absolute;font:500 10.5px Menlo,monospace;color:rgba(255,255,255,.7);background:#090c18;padding:1px 5px;border-radius:8px;transform:translate(-50%,-50%)}
+.ring{position:absolute;width:34px;height:34px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 18px rgba(255,255,255,.6);transform:translate(-50%,-50%)}.b-tot{color:#5cffb3;background:rgba(92,255,179,.14)}.b-tab{color:#5cffb3;background:rgba(92,255,179,.12)}
 .sub{font-size:12px;color:rgba(255,255,255,.62);margin-top:2px}
 .grow{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .val{font-family:"SF Mono",Menlo,Consolas,monospace;font-weight:700;font-size:17px;color:#fff}
@@ -79,7 +86,7 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
     <img src="LOGO" style="width:170px;height:170px">
     <div style="font-size:60px;font-weight:800;letter-spacing:-.02em;margin-top:8px">Parseley</div>
     <div style="font-size:26px;color:#b9c3e6;margin-top:8px">Your clipboard, with the math already done.</div>
-    <div style="font-size:18px;color:#7d8ab3;margin-top:22px">A 90-second tour</div>
+    <div style="font-size:18px;color:#7d8ab3;margin-top:22px">A quick tour</div>
   </div>
 </div>
 
@@ -169,6 +176,28 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
   <div id="p9" class="panel" style="left:620px;top:150px;width:560px"></div>
 </div>
 
+<!-- S13 JSON visualizer (inserted after tables) -->
+<div id="s13" class="scene">
+  <div id="p13" class="panel" style="left:300px;top:150px"></div>
+  <div id="gw13" class="abs" style="left:70px;top:112px;width:1140px;height:530px;border-radius:14px;background:#090c18;border:1px solid rgba(255,255,255,.16);box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden">
+    <div style="height:44px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.1)">
+      <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+      <img src="LOGO" style="width:22px;height:22px;margin-left:10px">
+      <div style="font-size:13px;font-weight:600">{"customer": "Ana", "orders": […]}<div class="sub" style="font-size:11px">17 cards</div></div>
+      <span style="flex:1"></span>
+      <span class="chip" style="font-weight:500;color:rgba(255,255,255,.5)">⌕ Search keys and values</span>
+      <span style="font-size:12px;color:rgba(255,255,255,.6)">⤡ Collapse all &nbsp; ⤢ Expand all &nbsp; − 58% +</span>
+    </div>
+    <div id="gc13" class="abs" style="left:0;top:45px;right:0;bottom:0;overflow:hidden">
+      <div id="gs13" class="abs" style="left:30px;top:18px;transform-origin:0 0;transform:scale(0.58)"></div>
+      <div style="position:absolute;left:14px;bottom:12px;font:10.5px Menlo,monospace;color:rgba(255,255,255,.7);background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:4px 10px">
+        <span class="gs">●</span> string &nbsp;<span class="gn">●</span> number &nbsp;<span class="gb">●</span> bool &nbsp;<span class="gd">●</span> null</div>
+    </div>
+    <div id="gi13" class="abs" style="top:45px;right:0;bottom:0;width:300px;border-left:1px solid rgba(255,255,255,.1);background:#0d1222;padding:16px;box-sizing:border-box"></div>
+  </div>
+  <div id="ring13" class="ring abs"></div>
+</div>
+
 <!-- S10 terminal -->
 <div id="s10" class="scene">
   <div class="term" style="left:180px;top:140px;width:920px;height:420px">
@@ -233,8 +262,8 @@ const S=[
  ['s7',46.5,55,'7 · PASTE QUEUE','Fill forms without switching back and forth','⌘-click clips, Queue them, then ⌃⌥⌘V pastes them one by one.'],
  ['s8',55,61,'8 · MODES','It adapts to the app you’re in','Number format, main stat and favourite transforms per app.'],
  ['s9',61,67,'9 · TABLES','Copied a range? Stats per column','Pick a column chip to see just its numbers.'],
- ['s10',67,73.5,'10 · TERMINAL & AI','Your history from the command line','The parseley CLI and an MCP server, so Claude can read your numbers.'],
- ['s11',73.5,79,'11 · PRIVATE','Everything stays on your Mac',''],
+ ['s10',67,73.5,'11 · TERMINAL & AI','Your history from the command line','The parseley CLI and an MCP server, so Claude can read your numbers.'],
+ ['s11',73.5,79,'12 · PRIVATE','Everything stays on your Mac',''],
  ['s12',79,86,'','The shortcuts to remember',''],
 ];
 const KEYS=[
@@ -373,7 +402,89 @@ function scene10(t){
   $('term').innerHTML=out;
 }
 
+// --- Scene 13: JSON visualizer ------------------------------------------------------------
+const J0=67, JL=8;   // inserted at 67 s; everything after shifts by 8 s
+const ORDERS=[19.5,7,64.25,120,33.9,12,88,5.5,41,250,16.75,9.99,72,30];
+const GITEMS=[0,1,2,3,4,'more',9,10,11,12,13];
+function buildGraph13(){
+  const card=(x,y,w,h,html,cls='')=>`<div class="gcard ${cls}" data-cls="${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">${html}</div>`;
+  const row=(k,v,c)=>`<div class="r"><span class="gk">${k}</span><span class="gd">: </span><span class="${c}">${v}</span></div>`;
+  let h='<svg width="900" height="800" style="position:absolute;left:0;top:0;overflow:visible">';
+  const kids=GITEMS.map((_,i)=>({x:600,y:i*70,h:56}));
+  const rootY=378-61, ordersY=378-31;
+  // edges root→orders, orders→children
+  const curve=(x1,y1,x2,y2)=>{const m=(x1+x2)/2;return `<path d="M${x1} ${y1} C${m} ${y1} ${m} ${y2} ${x2} ${y2}" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="2"/>`;};
+  h+=curve(259,378,340,378);
+  kids.forEach(k=>{h+=curve(519,378,k.x,k.y+k.h/2);});
+  h+='</svg>';
+  h+=card(0,rootY,250,122,row('customer','"Ana"','gs')+row('city','"Lisbon"','gs')+row('paid','true','gb')+row('total','1492.5','gn')+row('orders','[14 items]','gd'));
+  h+=`<div class="handle" style="left:241px;top:369px">−</div>`;
+  h+=card(340,ordersY,170,62,'<div class="gtitle">orders</div>'+`<div class="r gd">14 items</div>`);
+  h+=`<div class="handle" style="left:501px;top:369px">−</div>`;
+  h+=`<div class="elabel" style="left:300px;top:378px">orders</div>`;
+  GITEMS.forEach((it,i)=>{
+    const k=kids[i];
+    if(it==='more'){ h+=card(k.x,k.y,230,k.h,'<div class="r gd">… 4 more</div><div class="r gd">click to show all</div>','more'); }
+    else { h+=`<div id="gk13_${it}">`+card(k.x,k.y,230,k.h,row('id',String(it+1),'gn')+row('total',String(ORDERS[it]),'gn'))+'</div>'; }
+    const midX=(519+k.x)/2, midY=(378+k.y+k.h/2)/2;
+    h+=`<div class="elabel" style="left:${midX}px;top:${midY}px">${it==='more'?'5–8':it}</div>`;
+  });
+  $('gs13').innerHTML=h;
+}
+
+function scene13(t){
+  // 1. The JSON clip in the panel, Visualize / ⌘J.
+  const po=Math.min(ramp(t,J0+0.1,J0+0.4),1-ramp(t,J0+1.6,J0+1.9)); vis($('p13'),po,0,0.97+0.03*po);
+  if(po>0){
+    const d='<div class="preview">{"customer": "Ana", "city": "Lisbon", "paid": true,\n "total": 1492.5, "orders": [{"id": 1, "total": 19.5}, …]}</div>'+
+      `<div class="chips"><span class="tchip ${t>=J0+0.9?'hi':''}">⑃ Visualize</span><span class="tchip">∑ Add to series</span><span class="tchip">Comma list</span><span class="tchip">JSON array</span></div>`;
+    $('p13').innerHTML=panelHTML({rows:[
+      {b:'b-json',bt:'JSON',t:'{"customer": "Ana", "orders": [ … 14 items ]}',s:'Terminal · just now',cls:'sel'},
+      {b:'b-num',bt:'NUMBERS',t:'1,204.50 · 380.00 · 92.00 · 815.25',s:'Excel · 20 min ago'},
+      {b:'b-text',bt:'TEXT',t:'Lunch at 12:30 with the team',s:'Notes · 1 h ago'}],detail:d,
+      foot:'<span><span class="kc">⌘J</span> Visualize JSON</span><span><span class="kc">⏎</span> Paste</span>'});
+  }
+  // 2. The graph window.
+  const go=Math.min(ramp(t,J0+1.8,J0+2.2),1-ramp(t,J0+JL-0.4,J0+JL)); vis($('gw13'),go,16,0.98+0.02*go);
+  // Cards appear left to right.
+  const cards=$('gs13').querySelectorAll('.gcard,.handle,.elabel');
+  cards.forEach((c,i)=>{c.style.opacity=ramp(t,J0+2.0+i*0.03,J0+2.3+i*0.03);});
+  $('gs13').querySelector('svg').style.opacity=ramp(t,J0+2.1,J0+2.6);
+  const selected=t>=J0+4.0;
+  const sel=$('gk13_2').firstChild; sel.className='gcard'+(selected?' sel':'');
+  // Inspector.
+  const io=ramp(t,J0+4.1,J0+4.4);
+  $('gi13').style.opacity=io; $('gi13').style.transform=`translateX(${(1-io)*40}px)`;
+  $('gc13').style.right=(selected?300:0)+'px';
+  const copied=t>=J0+5.9;
+  $('gi13').innerHTML=`<div style="font:700 10px -apple-system,sans-serif;letter-spacing:.1em;color:#5ee7ff">OBJECT · 2 KEYS</div>
+    <div style="font:12.5px Menlo,monospace;margin:10px 0 12px">$.orders[2]</div>
+    <div class="chips"><span class="tchip ${t>=J0+5.6&&t<J0+6.4?'hi':''}">🔗 Copy path</span><span class="tchip">{ } Copy JSON</span></div>
+    <div style="font:700 10px -apple-system,sans-serif;letter-spacing:.1em;color:rgba(255,255,255,.5);margin:16px 0 8px">VALUE</div>
+    <div class="preview" style="margin:0">{\n  "id": 3,\n  "total": 64.25\n}</div>
+    ${copied?'<div class="ok" style="margin-top:14px;font-size:13px">✓ Copied path $.orders[2]</div>':''}`;
+  // Click rings: on the card, then on Copy path.
+  const ring=$('ring13');
+  if(t>=J0+3.8&&t<J0+4.3){ring.style.left=(70+30+(600+115)*0.58)+'px';ring.style.top=(112+45+18+(2*70+28)*0.58)+'px';vis(ring,1-ramp(t,J0+4.0,J0+4.3),0,1+ramp(t,J0+3.8,J0+4.3)*0.5);}
+  else if(t>=J0+5.4&&t<J0+5.9){ring.style.left=(70+1140-300+16+45)+'px';ring.style.top=(112+45+16+64)+'px';vis(ring,1-ramp(t,J0+5.6,J0+5.9),0,1+ramp(t,J0+5.4,J0+5.9)*0.5);}
+  else vis(ring,0);
+}
+
 function render(t){
+  if(t<J0){ renderBase(t); vis($('s13'),0); return; }
+  if(t>=J0+JL){ renderBase(t-JL); vis($('s13'),0); return; }
+  renderBase(J0-0.0001);   // everything else hidden
+  vis($('s13'),1);
+  scene13(t);
+  const co=win(t,J0,J0+JL,0.35);
+  $('cap').innerHTML='Copied JSON? See it as a graph<small>⌘J opens it: linked cards, search, and long lists show their first and last 5.</small>';
+  vis($('cap'),co,-8);
+  $('chapter').textContent='10 · JSON'; vis($('chapter'),co);
+  const ko=win(t,J0+0.8,J0+1.6,0.12);
+  $('keys').innerHTML=ko>0?'<div class="key">⌘</div><div class="key">J</div>':''; vis($('keys'),ko,10);
+}
+
+function renderBase(t){
   const shown={};
   let cap='',sub='',chap='',co=0;
   for(const [id,a,b,ch,c,s] of S){ const o=win(t,a,b,0.4); if(o>(shown[id]||0)) shown[id]=o; if(t>=a&&t<b){chap=ch;cap=c;sub=s;co=win(t,a,b,0.35);} }
@@ -394,6 +505,7 @@ function render(t){
   for(const [a,b,ks] of KEYS){ if(t>=a&&t<b){ kh=ks.map(k=>`<div class="key" style="${k.length>2?'font-size:22px':''}">${k}</div>`).join(''); ko=win(t,a,b,0.12);} }
   $('keys').innerHTML=kh; vis($('keys'),ko,10);
 }
+buildGraph13();
 window.render=render; render(0);
 </script>
 </body></html>

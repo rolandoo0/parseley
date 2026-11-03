@@ -176,7 +176,7 @@ private struct StepList: View {
                             Text("Watch the tour")
                                 .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Theme.textPrimary)
-                            Text("Every feature in 90 seconds")
+                            Text("Every feature in under 2 minutes")
                                 .font(.system(size: 10.5))
                                 .foregroundStyle(Theme.textTertiary)
                         }

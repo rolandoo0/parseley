@@ -13,7 +13,7 @@ const dir = __dirname;
 const root = path.join(dir, '..', '..');
 const logo = path.join(root, 'App/Resources/Assets.xcassets/AppLogo.imageset/logo_512.png');
 const videos = {
-  tour: { src: 'tour.html', fps: 24, duration: 86, out: path.join(root, 'App/Resources/ParseleyTour.mp4') },
+  tour: { src: 'tour.html', fps: 24, duration: 94, out: path.join(root, 'App/Resources/ParseleyTour.mp4') },
   sum: { src: 'sum.html', fps: 30, duration: 27, out: path.join(dir, 'sum.mp4') },
 };
 const video = videos[process.argv[2] || 'tour'];

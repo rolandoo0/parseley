@@ -82,28 +82,36 @@
   },
   {
    "content_start": 67.0,
-   "content_end": 73.5,
+   "content_end": 75.0,
    "video_start": 70.005,
-   "video_end": 78.586,
+   "video_end": 79.114,
    "tempo": 1.1,
    "lead": 0.35
   },
   {
-   "content_start": 73.5,
-   "content_end": 79.0,
-   "video_start": 78.586,
-   "video_end": 84.086,
+   "content_start": 75.0,
+   "content_end": 81.5,
+   "video_start": 79.114,
+   "video_end": 87.695,
+   "tempo": 1.1,
+   "lead": 0.35
+  },
+  {
+   "content_start": 81.5,
+   "content_end": 87.0,
+   "video_start": 87.695,
+   "video_end": 93.195,
    "tempo": 1.0553,
    "lead": 0.35
   },
   {
-   "content_start": 79.0,
-   "content_end": 86.0,
-   "video_start": 84.086,
-   "video_end": 91.086,
+   "content_start": 87.0,
+   "content_end": 94.0,
+   "video_start": 93.195,
+   "video_end": 100.195,
    "tempo": 1.0,
    "lead": 0.35
   }
  ],
- "duration": 91.086
+ "duration": 100.195
 }
